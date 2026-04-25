@@ -26,6 +26,9 @@ const LiveChat = () => {
   const isOpenRef = useRef(false);
   const selectedCustomerRef = useRef(null);
 
+  // Define Admin Emails Array
+  const adminEmails = ['kyone94@gmail.com', 'arkar999126@gmail.com'];
+
   // Sync isOpen state to Ref so our background timer can read it
   useEffect(() => {
     isOpenRef.current = isOpen;
@@ -110,7 +113,9 @@ const LiveChat = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         setUser(session.user);
-        const adminCheck = session.user.email === 'kyone94@gmail.com';
+        
+        // CHECK IF USER IS IN ADMIN LIST
+        const adminCheck = adminEmails.includes(session.user.email);
         setIsAdmin(adminCheck);
 
         fetchMessageCount(session.user, adminCheck);
@@ -125,7 +130,8 @@ const LiveChat = () => {
     const interval = setInterval(() => {
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (session?.user) {
-          const adminCheck = session.user.email === 'kyone94@gmail.com';
+          // CHECK IF USER IS IN ADMIN LIST
+          const adminCheck = adminEmails.includes(session.user.email);
           
           fetchMessageCount(session.user, adminCheck); // Update notification bubble
           

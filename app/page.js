@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
-import { Search, Filter, X, ArrowLeft, Check, Gamepad2 } from 'lucide-react'; 
+import { Search, Filter, X, ArrowLeft, Check, Gamepad2, CreditCard } from 'lucide-react'; 
 import { supabase } from '../lib/supabase';
 import Header from '../components/Header';
 import HeroSlider from '../components/HeroSlider';
@@ -21,6 +21,7 @@ export default function Home() {
   const [showAuth, setShowAuth] = useState(false); 
   
   const [games, setGames] = useState([]);
+  const [giftCards, setGiftCards] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [selectedGame, setSelectedGame] = useState(null);
@@ -34,22 +35,22 @@ export default function Home() {
   const [selectedPlatforms, setSelectedPlatforms] = useState([]);
 
   useEffect(() => {
-    const fetchGames = async () => {
-      const { data, error } = await supabase.from('games').select('*').order('created_at', { ascending: false });
-      if (data) setGames(data);
+    const fetchStoreData = async () => {
+      setIsLoading(true);
+      const { data: gamesData } = await supabase.from('games').select('*').order('created_at', { ascending: false });
+      const { data: giftsData } = await supabase.from('gift_cards').select('*').order('created_at', { ascending: false });
+      
+      if (gamesData) setGames(gamesData);
+      if (giftsData) setGiftCards(giftsData);
       setIsLoading(false);
     };
-    fetchGames();
+    fetchStoreData();
   }, []);
 
-  // --- NEW STRICT FILTERING LOGIC ---
   const isPreOrder = (game) => game.collections?.some(c => c.toLowerCase().includes('pre-order') || c.toLowerCase().includes('preorder'));
 
-  // Exclude Pre-Orders from New Games and PS5 categories
   const newGames = games.filter(game => game.collections.some(c => c.toLowerCase().includes('new games')) && !isPreOrder(game));
   const ps5GamesCategory = games.filter(game => game.collections.some(c => c.toLowerCase().includes('ps5 games')) && !isPreOrder(game));
-  
-  // Dedicated Pre-Order List
   const preOrderGames = games.filter(game => isPreOrder(game));
 
   const searchResults = games.filter(game => game.name.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -57,8 +58,8 @@ export default function Home() {
   const allUniqueGenres = [...new Set(games.flatMap(g => g.collections.filter(c => c !== "PS4 Games" && c !== "PS5 Games")))];
   const priceRanges = ['10,000 - 50,000 MMK', '50,000 - 100,000 MMK', '100,000 - 150,000 MMK', 'Over 150,000 MMK'];
 
-  const handleGameClick = (game) => {
-    setSelectedGame(game);
+  const handleGameClick = (item) => {
+    setSelectedGame(item);
     setCurrentView('details');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -82,6 +83,7 @@ export default function Home() {
   };
 
   const renderPlatformTags = (collections) => {
+    if (!collections) return null;
     let platforms = [];
     if (collections.includes("PS4 Games")) platforms.push("PS4");
     if (collections.includes("PS5 Games")) platforms.push("PS5");
@@ -93,8 +95,16 @@ export default function Home() {
     );
   };
 
-  const filteredSeeAllGames = seeAllBaseGames.filter(game => {
-    const price = Number(game.discount_price || game.price);
+  const filteredSeeAllGames = seeAllBaseGames.filter(item => {
+    const isGift = !!item.options;
+    
+    // Safely calculate price for both Games and Gift Cards
+    let price = 0;
+    if (isGift && item.options?.length > 0) {
+      price = Math.min(...item.options.map(o => Number(o.price)));
+    } else {
+      price = Number(item.discount_price || item.price);
+    }
 
     let matchesPrice = true;
     if (selectedPrices.length > 0) {
@@ -108,14 +118,14 @@ export default function Home() {
     }
 
     let matchesGenre = true;
-    if (selectedGenres.length > 0) {
-      matchesGenre = selectedGenres.some(g => game.collections.includes(g));
+    if (selectedGenres.length > 0 && !isGift) {
+      matchesGenre = selectedGenres.some(g => item.collections.includes(g));
     }
 
     let matchesPlatform = true;
-    if (selectedPlatforms.length > 0) {
-      const hasPS4 = game.collections.includes("PS4 Games");
-      const hasPS5 = game.collections.includes("PS5 Games");
+    if (selectedPlatforms.length > 0 && !isGift) {
+      const hasPS4 = item.collections.includes("PS4 Games");
+      const hasPS5 = item.collections.includes("PS5 Games");
       matchesPlatform = (selectedPlatforms.includes('PS4') && hasPS4) || (selectedPlatforms.includes('PS5') && hasPS5);
     }
 
@@ -144,7 +154,7 @@ export default function Home() {
       <div className="relative mx-auto min-h-screen max-w-md bg-white shadow-2xl pb-20 overflow-x-hidden">
         <Toaster position="top-center" />
 
-        {currentView !== 'details' && currentView !== 'cart' && currentView !== 'wishlist' && currentView !== 'orders' && currentView !== 'seeAll' && (
+        {currentView !== 'details' && currentView !== 'cart' && currentView !== 'wishlist' && currentView !== 'orders' && currentView !== 'seeAll' && currentView !== 'checkout' && (
           <Header 
             onSignInClick={() => setShowAuth(true)} 
             onProfileClick={() => setCurrentView('profile')}
@@ -164,14 +174,20 @@ export default function Home() {
           {currentView === 'orders' && <MyOrders onBack={() => setCurrentView('store')} />}
           
           {currentView === 'checkout' && (
-            <div className="animate-in slide-in-from-right duration-300 bg-white min-h-screen">
-              <button onClick={() => setCurrentView('cart')} className="m-4 text-sm font-bold text-blue-600 hover:underline">← Back to Cart</button>
+            <div className="animate-in slide-in-from-right duration-300 bg-white min-h-screen pt-4">
+              <button onClick={() => setCurrentView('cart')} className="mx-4 mb-2 text-sm font-bold text-blue-600 hover:underline">← Back to Cart</button>
               <Checkout />
             </div>
           )}
 
           {currentView === 'details' && selectedGame && (
-            <ProductDetail game={selectedGame} allGames={games} onBack={() => setCurrentView('store')} onBuyNow={() => checkAuthAndNavigate('checkout')} onGameClick={handleGameClick} />
+            <ProductDetail 
+              game={selectedGame} 
+              allGames={[...games, ...giftCards]} 
+              onBack={() => setCurrentView('store')} 
+              onBuyNow={() => checkAuthAndNavigate('checkout')} 
+              onGameClick={handleGameClick} 
+            />
           )}
 
           {/* --- "SEE ALL" GRID VIEW --- */}
@@ -180,7 +196,7 @@ export default function Home() {
               <div className="sticky top-0 z-40 flex items-center justify-between bg-white px-4 py-4 shadow-sm">
                 <div className="flex items-center">
                   <button onClick={() => setCurrentView('store')} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-all"><ArrowLeft className="h-6 w-6 text-gray-800" /></button>
-                  <h1 className="ml-2 text-xl font-black text-gray-900">{seeAllTitle}</h1>
+                  <h1 className="ml-2 text-xl font-black text-gray-900 truncate max-w-[200px]">{seeAllTitle}</h1>
                 </div>
                 <button onClick={() => setIsFilterOpen(true)} className="relative p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors">
                   <Filter className="h-5 w-5 text-gray-800" />
@@ -194,20 +210,30 @@ export default function Home() {
 
               <div className="p-4 grid grid-cols-2 gap-4">
                 {filteredSeeAllGames.length === 0 ? (
-                  <div className="col-span-2 text-center py-20 text-gray-500 font-bold">No games match your filters.</div>
+                  <div className="col-span-2 text-center py-20 text-gray-500 font-bold">No items match your filters.</div>
                 ) : (
-                  filteredSeeAllGames.map(game => (
-                    <div key={game.id} onClick={() => handleGameClick(game)} className="flex flex-col gap-2 cursor-pointer active:scale-95 transition-transform group relative">
-                      {renderPlatformTags(game.collections)}
-                      <div className="aspect-square w-full rounded-xl overflow-hidden bg-gray-100 shadow-sm border border-gray-100">
-                        <img src={game.cover_image} alt={game.name} className="h-full w-full object-cover group-hover:scale-110 transition-transform" />
+                  filteredSeeAllGames.map(item => {
+                    const isGift = !!item.options;
+                    let lowestPrice = 0;
+                    if (isGift && item.options?.length > 0) {
+                      lowestPrice = Math.min(...item.options.map(o => Number(o.price)));
+                    }
+
+                    return (
+                      <div key={item.id} onClick={() => handleGameClick(item)} className="flex flex-col gap-2 cursor-pointer active:scale-95 transition-transform group relative">
+                        {!isGift && renderPlatformTags(item.collections)}
+                        <div className={`aspect-square w-full rounded-xl overflow-hidden bg-gray-100 shadow-sm border border-gray-100 flex items-center justify-center ${isGift ? 'p-4' : ''}`}>
+                          <img src={item.cover_image || item.image} alt={item.name} className={`w-full h-full group-hover:scale-110 transition-transform ${isGift ? 'object-contain' : 'object-cover'}`} />
+                        </div>
+                        <div>
+                          <h3 className="text-xs font-bold text-gray-900 truncate">{item.name}</h3>
+                          <p className="text-xs font-semibold text-[#e31818] mt-0.5">
+                            {isGift ? `From ${lowestPrice.toLocaleString()} MMK` : `${item.discount_price || item.price} MMK`}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="text-xs font-bold text-gray-900 truncate">{game.name}</h3>
-                        <p className="text-xs font-semibold text-[#e31818] mt-0.5">{game.discount_price || game.price} MMK</p>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 
@@ -231,7 +257,7 @@ export default function Home() {
                     </div>
 
                     <div className="mb-6 bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                      <h3 className="text-xs font-bold text-gray-400 mb-4 uppercase tracking-widest">Platform</h3>
+                      <h3 className="text-xs font-bold text-gray-400 mb-4 uppercase tracking-widest">Platform (Games Only)</h3>
                       <div className="grid grid-cols-2 gap-3">
                         {['PS4', 'PS5'].map(plat => (
                           <button key={plat} onClick={() => toggleFilter('platform', plat)} className={`py-4 flex flex-col items-center justify-center gap-2 rounded-xl text-lg font-black italic tracking-tighter border transition-all ${selectedPlatforms.includes(plat) ? 'bg-black text-white border-black shadow-md' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
@@ -277,19 +303,19 @@ export default function Home() {
               <div className="px-4 py-4">
                 <div className="flex items-center rounded-xl bg-gray-100 px-4 py-3 border border-transparent focus-within:border-black focus-within:bg-white transition-all">
                   <Search className="h-5 w-5 text-gray-500" />
-                  <input type="text" placeholder="Search games..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="ml-3 w-full bg-transparent text-sm font-bold outline-none placeholder-gray-500 text-gray-900" />
+                  <input type="text" placeholder="Search games & gift cards..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="ml-3 w-full bg-transparent text-sm font-bold outline-none placeholder-gray-500 text-gray-900" />
                 </div>
               </div>
 
               <HeroSlider />
 
               {isLoading ? (
-                <div className="p-8 text-center text-sm font-bold text-gray-500">Loading your games...</div>
+                <div className="p-8 text-center text-sm font-bold text-gray-500">Loading your store...</div>
               ) : searchQuery ? (
                 <div className="px-4 mt-6">
                   <h2 className="mb-4 text-lg font-bold text-gray-900">Search Results</h2>
                   {searchResults.length === 0 ? (
-                    <p className="text-sm font-semibold text-gray-500">No games found.</p>
+                    <p className="text-sm font-semibold text-gray-500">No products found.</p>
                   ) : (
                     <div className="flex flex-col gap-4">
                       {searchResults.map((game) => (
@@ -358,7 +384,7 @@ export default function Home() {
                     )}
                   </div>
 
-                  {/* --- NEW BLOCK: PRE-ORDERS --- */}
+                  {/* PRE-ORDERS */}
                   <div className="px-4 flex justify-between items-end mb-4 mt-8">
                     <h2 className="text-lg font-bold text-gray-900">Pre-Orders</h2>
                     {preOrderGames.length > 0 && (
@@ -381,6 +407,47 @@ export default function Home() {
                       ))
                     )}
                   </div>
+
+                  {/* --- WALLET TOP-UP BLOCK (HORIZONTAL SCROLL & UNIQUE ITEMS ONLY) --- */}
+                  {giftCards.length > 0 && (
+                    <div className="mt-8 mb-12 animate-in fade-in duration-700">
+                      
+                      <div className="px-4 flex justify-between items-end mb-4">
+                        <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                          <CreditCard className="w-5 h-5 text-gray-400"/> Wallet Top-Up
+                        </h2>
+                        {giftCards.length > 5 && (
+                          <button onClick={() => handleSeeAllClick('Wallet Top-Up', giftCards)} className="text-xs font-bold text-blue-600 hover:underline">See all &gt;</button>
+                        )}
+                      </div>
+                      
+                      <div className="flex overflow-x-auto px-4 pb-4 gap-4 snap-x hide-scrollbar">
+                        {giftCards.slice(0, 5).map((card) => {
+                          // Find the cheapest option to display
+                          const lowestPrice = card.options && card.options.length > 0 
+                            ? Math.min(...card.options.map(o => Number(o.price))) 
+                            : 0;
+
+                          return (
+                            <div key={card.id} onClick={() => handleGameClick(card)} className="min-w-[260px] snap-start flex items-center bg-white p-3 rounded-2xl border border-gray-100 shadow-sm cursor-pointer active:scale-[0.97] transition-all relative group overflow-hidden">
+                              
+                              {/* Image Box on the left */}
+                              <div className="w-20 h-20 flex-shrink-0 bg-gray-50 rounded-xl p-2 border border-gray-100 flex items-center justify-center overflow-hidden">
+                                <img src={card.image} className="w-full h-full object-contain group-hover:scale-110 transition-transform" alt={card.name} />
+                              </div>
+                              
+                              {/* Text Details on the right */}
+                              <div className="ml-3 flex-1 flex flex-col justify-center truncate pr-2">
+                                <h3 className="text-sm font-bold text-gray-900 leading-snug mb-1 truncate whitespace-normal line-clamp-2">{card.name}</h3>
+                                <p className="text-sm font-black text-[#e31818] mt-1">From {lowestPrice.toLocaleString()} MMK</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                    </div>
+                  )}
 
                 </div>
               )}

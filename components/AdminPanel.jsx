@@ -27,8 +27,12 @@ const AdminPanel = ({ onBackToStore }) => {
   const [gameSize, setGameSize] = useState('');
   const [collections, setCollections] = useState(''); 
   const [uniqueCollections, setUniqueCollections] = useState([]); 
+  
+  // Image States
   const [coverFile, setCoverFile] = useState(null); 
+  const [coverUrlInput, setCoverUrlInput] = useState(''); // NEW: Holds the pasted image URL
   const [coverPreview, setCoverPreview] = useState(null); 
+  
   const [isSavingGame, setIsSavingGame] = useState(false);
 
   const [isPS5, setIsPS5] = useState(false);
@@ -63,7 +67,6 @@ const AdminPanel = ({ onBackToStore }) => {
     if (data) setOrdersList(data);
   };
 
-  // --- NEW: Calculate Pending Orders Count ---
   const pendingOrdersCount = ordersList.filter(order => order.status === 'pending').length;
 
   const filteredOrders = ordersList.filter(order => {
@@ -89,7 +92,7 @@ const AdminPanel = ({ onBackToStore }) => {
       if (error) throw error;
       toast.success("Order Updated!");
       setSelectedOrder(null);
-      fetchOrders(); // Refreshes orders and updates the notification bubble!
+      fetchOrders(); 
     } catch (error) {
       toast.error(error.message);
     }
@@ -102,6 +105,7 @@ const AdminPanel = ({ onBackToStore }) => {
     try {
       let finalCoverUrl = null;
 
+      // 1. If they uploaded a file, save it to Storage
       if (coverFile) {
         const fileExt = coverFile.name.split('.').pop();
         const fileName = `cover-${Date.now()}.${fileExt}`;
@@ -109,6 +113,10 @@ const AdminPanel = ({ onBackToStore }) => {
         if (uploadError) throw uploadError;
         const { data: { publicUrl } } = supabase.storage.from('game_covers').getPublicUrl(fileName);
         finalCoverUrl = publicUrl;
+      } 
+      // 2. If they pasted a URL instead, use that!
+      else if (coverUrlInput) {
+        finalCoverUrl = coverUrlInput;
       }
 
       let collectionsArray = collections.split(',').map(tag => tag.trim()).filter(tag => tag !== "");
@@ -133,7 +141,7 @@ const AdminPanel = ({ onBackToStore }) => {
         if (error) throw error;
         toast.success("Game updated successfully!");
       } else {
-        if (!finalCoverUrl) throw new Error("Cover image is required for new games!");
+        if (!finalCoverUrl) throw new Error("Cover image or URL is required for new games!");
         const { error } = await supabase.from('games').insert([gameData]);
         if (error) throw error;
         toast.success("Game added successfully!");
@@ -173,7 +181,8 @@ const AdminPanel = ({ onBackToStore }) => {
     setIsPS4(game.collections.includes("PS4 Games"));
 
     setCoverFile(null); 
-    setCoverPreview(game.cover_image); 
+    setCoverUrlInput(''); // Clear URL input
+    setCoverPreview(game.cover_image); // Show the current image in preview
     setShowGameForm(true);
   };
 
@@ -181,7 +190,7 @@ const AdminPanel = ({ onBackToStore }) => {
     setEditGameId(null); setGameName(''); setPrice(''); setDiscountPrice(''); 
     setYoutubeLink(''); setDescription(''); setGameSize(''); setCollections(''); 
     setIsPS5(false); setIsPS4(false); 
-    setCoverFile(null); setCoverPreview(null); setShowGameForm(false);
+    setCoverFile(null); setCoverUrlInput(''); setCoverPreview(null); setShowGameForm(false);
   };
 
   const handleQuickAddCollection = (tag) => {
@@ -233,7 +242,6 @@ const AdminPanel = ({ onBackToStore }) => {
         </div>
         <nav className="flex-1 py-6 px-3 flex flex-col gap-2">
           
-          {/* UPDATED: Manage Orders Button with Notification Bubble */}
           <button 
             onClick={() => setActiveTab('orders')} 
             className={`flex w-full items-center justify-between px-4 py-3 rounded-lg text-sm font-semibold transition-colors ${activeTab === 'orders' ? 'bg-[#e31818] text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
@@ -241,7 +249,6 @@ const AdminPanel = ({ onBackToStore }) => {
             <div className="flex items-center gap-3">
               <ShoppingBag className="h-5 w-5" /> Manage Orders
             </div>
-            {/* Show Bubble if there are pending orders */}
             {pendingOrdersCount > 0 && (
               <span className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold shadow-sm ${activeTab === 'orders' ? 'bg-white text-[#e31818]' : 'bg-[#e31818] text-white'}`}>
                 {pendingOrdersCount}
@@ -445,16 +452,47 @@ const AdminPanel = ({ onBackToStore }) => {
               </h3>
               <div className="grid grid-cols-2 gap-6">
                 
+                {/* --- NEW: URL OR FILE UPLOAD UI --- */}
                 <div className="col-span-2 flex flex-col gap-4 p-4 border border-gray-100 rounded-xl bg-gray-50">
-                  <div className="flex justify-between items-center">
-                    <label className="block text-sm font-bold text-gray-700">Game Cover Image & Platform Review</label>
-                    <input type="file" accept="image/*" onChange={(e) => { 
-                      setCoverFile(e.target.files[0]);
-                      setCoverPreview(URL.createObjectURL(e.target.files[0]));
-                    }} required={!editGameId} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 cursor-pointer" />
+                  <label className="block text-sm font-bold text-gray-700">Game Cover Image & Platform Review</label>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {/* Option 1: File Upload */}
+                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                      <p className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider">Option 1: Upload File</p>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={(e) => { 
+                          if(e.target.files[0]) {
+                            setCoverFile(e.target.files[0]);
+                            setCoverPreview(URL.createObjectURL(e.target.files[0]));
+                            setCoverUrlInput(''); // Clear URL if they upload a file
+                          }
+                        }} 
+                        className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 cursor-pointer" 
+                      />
+                    </div>
+
+                    {/* Option 2: Paste URL */}
+                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-center">
+                      <p className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider">Option 2: Paste Image URL</p>
+                      <input 
+                        type="url" 
+                        value={coverUrlInput}
+                        onChange={(e) => {
+                          setCoverUrlInput(e.target.value);
+                          setCoverPreview(e.target.value); // Show preview from URL instantly
+                          setCoverFile(null); // Clear file if they paste a URL
+                        }}
+                        placeholder="https://example.com/image.jpg"
+                        className="w-full rounded-xl border border-gray-300 px-4 py-2 text-sm text-gray-900 outline-none focus:border-black transition-colors"
+                      />
+                    </div>
                   </div>
+
                   {coverPreview && (
-                    <div className="w-full h-80 rounded-xl overflow-hidden bg-white border-2 border-dashed border-gray-200 p-2 relative">
+                    <div className="w-full h-80 rounded-xl overflow-hidden bg-white border-2 border-dashed border-gray-200 p-2 relative mt-2">
                       <img src={coverPreview} alt="Preview" className="w-full h-full object-contain" />
                       {(isPS5 || isPS4) && (
                         <div className="absolute top-4 left-4 bg-gray-800/90 text-white text-xl font-extrabold px-6 py-2 rounded-xl shadow-xl border border-gray-700">

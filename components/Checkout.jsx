@@ -59,7 +59,6 @@ const Checkout = () => {
       if (uploadError) throw uploadError;
       const { data: { publicUrl } } = supabase.storage.from('receipts').getPublicUrl(fileName);
 
-      // SAVE ORDER (Now includes cover_image!)
       const { error: dbError } = await supabase.from('orders').insert([{
         order_no: orderNo,
         user_id: session.user.id,
@@ -70,7 +69,7 @@ const Checkout = () => {
           id: item.games.id,
           name: item.games.name, 
           price: item.games.discount_price || item.games.price, 
-          cover_image: item.games.cover_image // <-- We added this so MyOrders can see the image!
+          cover_image: item.games.cover_image 
         })),
         status: 'pending'
       }]);
@@ -86,6 +85,11 @@ const Checkout = () => {
       setIsSubmitting(false);
     }
   };
+
+  // Check if any item in the cart is a pre-order
+  const hasPreOrder = cartItems.some(item => 
+    item.games.collections && item.games.collections.some(c => c.toLowerCase().includes('pre-order') || c.toLowerCase().includes('preorder'))
+  );
 
   if (isSuccess) {
     return (
@@ -137,9 +141,10 @@ const Checkout = () => {
         </div>
       </div>
 
+      {/* --- UPDATED BUTTON TEXT --- */}
       <button onClick={handleConfirmPayment} disabled={isSubmitting || cartItems.length === 0} className="mt-6 w-full rounded-xl bg-[#e31818] py-4 font-bold text-white shadow-lg shadow-red-500/30 hover:bg-red-700 active:scale-95 transition-all disabled:opacity-50 flex justify-center items-center gap-2">
-        {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
-        {isSubmitting ? 'Processing Payment...' : 'Confirm Payment'}
+        {isSubmitting && <Loader2 className="h-5 w-5 animate-spin" />}
+        {isSubmitting ? 'Processing Payment...' : (hasPreOrder ? 'Proceed to Pre-Order' : 'Confirm Payment')}
       </button>
     </div>
   );

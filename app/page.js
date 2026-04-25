@@ -14,8 +14,7 @@ import ProductDetail from '../components/ProductDetail';
 import Cart from '../components/Cart';         
 import Wishlist from '../components/Wishlist'; 
 import MyOrders from '../components/MyOrders'; 
-import toast from 'react-hot-toast';
-import LiveChat from '../components/LiveChat'; // <-- Add this import
+import LiveChat from '../components/LiveChat'; 
 
 export default function Home() {
   const [currentView, setCurrentView] = useState('store'); 
@@ -43,12 +42,19 @@ export default function Home() {
     fetchGames();
   }, []);
 
-  const newGames = games.filter(game => game.collections.some(c => c.toLowerCase().includes('new games')));
-  const ps5GamesCategory = games.filter(game => game.collections.some(c => c.toLowerCase().includes('ps5 games')));
+  // --- NEW STRICT FILTERING LOGIC ---
+  const isPreOrder = (game) => game.collections?.some(c => c.toLowerCase().includes('pre-order') || c.toLowerCase().includes('preorder'));
+
+  // Exclude Pre-Orders from New Games and PS5 categories
+  const newGames = games.filter(game => game.collections.some(c => c.toLowerCase().includes('new games')) && !isPreOrder(game));
+  const ps5GamesCategory = games.filter(game => game.collections.some(c => c.toLowerCase().includes('ps5 games')) && !isPreOrder(game));
+  
+  // Dedicated Pre-Order List
+  const preOrderGames = games.filter(game => isPreOrder(game));
+
   const searchResults = games.filter(game => game.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const allUniqueGenres = [...new Set(games.flatMap(g => g.collections.filter(c => c !== "PS4 Games" && c !== "PS5 Games")))];
-  
   const priceRanges = ['10,000 - 50,000 MMK', '50,000 - 100,000 MMK', '100,000 - 150,000 MMK', 'Over 150,000 MMK'];
 
   const handleGameClick = (game) => {
@@ -87,7 +93,6 @@ export default function Home() {
     );
   };
 
-  // --- FILTER LOGIC ---
   const filteredSeeAllGames = seeAllBaseGames.filter(game => {
     const price = Number(game.discount_price || game.price);
 
@@ -118,10 +123,7 @@ export default function Home() {
   });
 
   const toggleFilter = (type, value) => {
-    if (type === 'price') {
-      // FIXED: If they click the already selected price, clear it. Otherwise, set it as the ONLY selected price.
-      setSelectedPrices(prev => prev.includes(value) ? [] : [value]);
-    }
+    if (type === 'price') setSelectedPrices(prev => prev.includes(value) ? [] : [value]);
     if (type === 'genre') setSelectedGenres(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]);
     if (type === 'platform') setSelectedPlatforms(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]);
   };
@@ -175,7 +177,6 @@ export default function Home() {
           {/* --- "SEE ALL" GRID VIEW --- */}
           {currentView === 'seeAll' && (
             <div className="animate-in slide-in-from-right duration-300 min-h-screen bg-gray-50">
-              
               <div className="sticky top-0 z-40 flex items-center justify-between bg-white px-4 py-4 shadow-sm">
                 <div className="flex items-center">
                   <button onClick={() => setCurrentView('store')} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-all"><ArrowLeft className="h-6 w-6 text-gray-800" /></button>
@@ -210,7 +211,6 @@ export default function Home() {
                 )}
               </div>
 
-              {/* LIGHT THEME FILTER MODAL */}
               {isFilterOpen && (
                 <div className="fixed inset-0 z-[200] flex flex-col bg-gray-50 text-gray-900 animate-in slide-in-from-bottom duration-300">
                   <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
@@ -219,8 +219,6 @@ export default function Home() {
                   </div>
                   
                   <div className="flex-1 overflow-y-auto p-4 pb-32">
-                    
-                    {/* Price Filter (Single Select) */}
                     <div className="mb-6 bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                       <h3 className="text-xs font-bold text-gray-400 mb-4 uppercase tracking-widest">Price</h3>
                       <div className="flex flex-wrap gap-2">
@@ -232,7 +230,6 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {/* Platform Filter */}
                     <div className="mb-6 bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                       <h3 className="text-xs font-bold text-gray-400 mb-4 uppercase tracking-widest">Platform</h3>
                       <div className="grid grid-cols-2 gap-3">
@@ -245,7 +242,6 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {/* Genre Filter */}
                     <div className="mb-6 bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                       <h3 className="text-xs font-bold text-gray-400 mb-4 uppercase tracking-widest">Genre</h3>
                       <div className="flex flex-col">
@@ -262,7 +258,6 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* Filter Bottom Action Bar */}
                   <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 flex items-center gap-4 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-50">
                     <button onClick={() => { setSelectedPrices([]); setSelectedGenres([]); setSelectedPlatforms([]); }} className="flex-1 py-4 text-sm font-bold text-gray-500 hover:text-black transition-colors">
                       Clear all
@@ -363,12 +358,36 @@ export default function Home() {
                     )}
                   </div>
 
+                  {/* --- NEW BLOCK: PRE-ORDERS --- */}
+                  <div className="px-4 flex justify-between items-end mb-4 mt-8">
+                    <h2 className="text-lg font-bold text-gray-900">Pre-Orders</h2>
+                    {preOrderGames.length > 0 && (
+                      <button onClick={() => handleSeeAllClick('Pre-Orders', preOrderGames)} className="text-xs font-bold text-blue-600 hover:underline">See all &gt;</button>
+                    )}
+                  </div>
+                  <div className="flex overflow-x-auto px-4 pb-4 gap-4 snap-x hide-scrollbar">
+                    {preOrderGames.length === 0 ? (
+                      <p className="text-sm font-semibold text-gray-500 w-full text-center py-4">No Pre-Orders available right now.</p>
+                    ) : (
+                      preOrderGames.slice(0, 10).map(game => (
+                        <div key={game.id} onClick={() => handleGameClick(game)} className="min-w-[140px] max-w-[140px] snap-start flex flex-col gap-2 cursor-pointer active:scale-95 transition-transform group relative">
+                          {renderPlatformTags(game.collections)}
+                          <div className="aspect-square w-full rounded-xl overflow-hidden bg-gray-100 shadow-sm border border-gray-100"><img src={game.cover_image} alt={game.name} className="h-full w-full object-cover group-hover:scale-110 transition-transform" /></div>
+                          <div>
+                            <h3 className="text-xs font-bold text-gray-900 truncate">{game.name}</h3>
+                            <p className="text-xs font-semibold text-[#e31818] mt-0.5">{game.discount_price || game.price} MMK</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
                 </div>
               )}
             </div>
           )}
         </main>
-        {/* --- GLOBAL LIVE CHAT BUBBLE --- */}
+        
         <LiveChat />
       </div>
     </div>

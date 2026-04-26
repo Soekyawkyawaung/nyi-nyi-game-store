@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 
 const AdminPanel = ({ onBackToStore }) => {
   const [activeTab, setActiveTab] = useState('orders'); 
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // NEW: Mobile Sidebar Toggle
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); 
   
   const [ordersList, setOrdersList] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -17,6 +17,7 @@ const AdminPanel = ({ onBackToStore }) => {
   const [orderYear, setOrderYear] = useState('');
   
   const [gamesList, setGamesList] = useState([]);
+  const [gameSearch, setGameSearch] = useState(''); // NEW: Game Search State
   const [isLoadingGames, setIsLoadingGames] = useState(true);
   const [showGameForm, setShowGameForm] = useState(false);
   const [editGameId, setEditGameId] = useState(null); 
@@ -41,7 +42,6 @@ const AdminPanel = ({ onBackToStore }) => {
   const [sliderFiles, setSliderFiles] = useState({ 1: null, 2: null, 3: null, 4: null, 5: null });
   const [isUploadingSlider, setIsUploadingSlider] = useState(false);
 
-  // --- GIFT CARD STATES ---
   const [giftCardsList, setGiftCardsList] = useState([]);
   const [showGiftForm, setShowGiftForm] = useState(false);
   const [editGiftId, setEditGiftId] = useState(null);
@@ -98,6 +98,13 @@ const AdminPanel = ({ onBackToStore }) => {
     const matchesYear = orderYear ? orderDate.getFullYear() === parseInt(orderYear) : true;
 
     return matchesSearch && matchesMonth && matchesYear;
+  });
+
+  // NEW: Filter games based on search input
+  const filteredGames = gamesList.filter(game => {
+    const searchLower = gameSearch.toLowerCase();
+    return game.name.toLowerCase().includes(searchLower) || 
+           (game.collections && game.collections.some(c => c.toLowerCase().includes(searchLower)));
   });
 
   const handleUpdateOrder = async (e) => {
@@ -177,9 +184,9 @@ const AdminPanel = ({ onBackToStore }) => {
     setGameName(game.name);
     setPrice(game.price.toString());
     setDiscountPrice(game.discount_price ? game.discount_price.toString() : '');
-    setGameSize(game.size);
+    setGameSize(game.size || '');
     setYoutubeLink(game.youtube_link || '');
-    setDescription(game.description);
+    setDescription(game.description || '');
     
     const textCollections = game.collections.filter(tag => tag !== "PS5 Games" && tag !== "PS4 Games").join(', ');
     setCollections(textCollections);
@@ -207,6 +214,7 @@ const AdminPanel = ({ onBackToStore }) => {
   };
 
   const getPlatformTags = (gameCollections) => {
+    if(!gameCollections) return "";
     let platforms = [];
     if (gameCollections.includes("PS4 Games")) platforms.push("PS4");
     if (gameCollections.includes("PS5 Games")) platforms.push("PS5");
@@ -214,7 +222,6 @@ const AdminPanel = ({ onBackToStore }) => {
     return platforms.join("");
   };
 
-  // --- GIFT CARD HANDLERS ---
   const handleAddOption = () => setGiftOptions([...giftOptions, { label: '', price: '' }]);
   const handleRemoveOption = (index) => setGiftOptions(giftOptions.filter((_, i) => i !== index));
   const handleOptionChange = (index, field, value) => {
@@ -301,12 +308,10 @@ const AdminPanel = ({ onBackToStore }) => {
   return (
     <div className="flex h-screen w-full bg-gray-50 font-sans relative overflow-hidden">
       
-      {/* MOBILE OVERLAY */}
       {isSidebarOpen && (
         <div className="fixed inset-0 z-[150] bg-black/50 md:hidden" onClick={() => setIsSidebarOpen(false)}></div>
       )}
 
-      {/* --- RESPONSIVE SIDEBAR --- */}
       <aside className={`fixed inset-y-0 left-0 z-[200] w-64 transform bg-gray-900 flex flex-col text-white shadow-xl transition-transform duration-300 md:relative md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 border-b border-gray-800 flex justify-between items-center">
           <div>
@@ -348,10 +353,8 @@ const AdminPanel = ({ onBackToStore }) => {
         </div>
       </aside>
 
-      {/* --- MAIN CONTENT WRAPPER --- */}
       <div className="flex-1 flex flex-col h-full overflow-hidden relative">
         
-        {/* MOBILE TOP HEADER */}
         <div className="md:hidden flex items-center justify-between bg-white px-4 py-3 shadow-sm border-b border-gray-100 z-40">
           <div className="flex items-center gap-3">
             <Menu onClick={() => setIsSidebarOpen(true)} className="h-6 w-6 text-gray-800 cursor-pointer" />
@@ -427,7 +430,6 @@ const AdminPanel = ({ onBackToStore }) => {
             </div>
           )}
 
-          {/* ORDER REVIEW MODAL */}
           {activeTab === 'orders' && selectedOrder && (
             <div className="max-w-4xl animate-in fade-in duration-300">
               <button onClick={() => setSelectedOrder(null)} className="mb-6 text-sm font-bold text-blue-600 hover:underline">← Back to Orders</button>
@@ -483,6 +485,14 @@ const AdminPanel = ({ onBackToStore }) => {
                 </button>
               </div>
 
+              {/* NEW: GAME SEARCH BAR */}
+              <div className="flex flex-col md:flex-row gap-4 mb-6 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                <div className="flex flex-1 items-center rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+                  <Search className="h-5 w-5 text-gray-400" />
+                  <input type="text" placeholder="Search games by name or category tag..." value={gameSearch} onChange={(e) => setGameSearch(e.target.value)} className="ml-2 w-full bg-transparent text-sm outline-none text-gray-900" />
+                </div>
+              </div>
+
               {isLoadingGames ? (
                 <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-red-600" /></div>
               ) : (
@@ -497,33 +507,37 @@ const AdminPanel = ({ onBackToStore }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {gamesList.map(game => (
-                        <tr key={game.id} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="p-4 flex items-center gap-3 md:gap-4">
-                            <div className="h-10 w-10 md:h-12 md:w-12 rounded object-cover overflow-hidden bg-gray-100 border border-gray-100 relative group flex-shrink-0">
-                              <img src={game.cover_image} alt={game.name} className="h-full w-full object-cover transition-transform group-hover:scale-110" />
-                              {getPlatformTags(game.collections) && (
-                                <div className="absolute top-0.5 left-0.5 bg-gray-800/80 text-white text-[8px] font-bold px-1 py-[1px] rounded shadow hidden md:block">{getPlatformTags(game.collections)}</div>
+                      {filteredGames.length === 0 ? (
+                        <tr><td colSpan="4" className="p-8 text-center text-gray-500">No games match your search.</td></tr>
+                      ) : (
+                        filteredGames.map(game => (
+                          <tr key={game.id} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="p-4 flex items-center gap-3 md:gap-4">
+                              <div className="h-10 w-10 md:h-12 md:w-12 rounded object-cover overflow-hidden bg-gray-100 border border-gray-100 relative group flex-shrink-0">
+                                <img src={game.cover_image} alt={game.name} className="h-full w-full object-cover transition-transform group-hover:scale-110" />
+                                {getPlatformTags(game.collections) && (
+                                  <div className="absolute top-0.5 left-0.5 bg-gray-800/80 text-white text-[8px] font-bold px-1 py-[1px] rounded shadow hidden md:block">{getPlatformTags(game.collections)}</div>
+                                )}
+                              </div>
+                              <span className="font-bold text-sm md:text-base text-gray-900 truncate max-w-[150px] md:max-w-xs">{game.name}</span>
+                            </td>
+                            <td className="p-4 text-sm font-semibold text-gray-900">
+                              {game.discount_price ? (
+                                <div className="flex flex-col"><span className="text-red-600 font-bold">{game.discount_price} MMK</span><span className="text-[10px] md:text-xs text-gray-400 line-through">{game.price} MMK</span></div>
+                              ) : (
+                                <span className="font-bold">{game.price} MMK</span>
                               )}
-                            </div>
-                            <span className="font-bold text-sm md:text-base text-gray-900 truncate max-w-[150px] md:max-w-xs">{game.name}</span>
-                          </td>
-                          <td className="p-4 text-sm font-semibold text-gray-900">
-                            {game.discount_price ? (
-                              <div className="flex flex-col"><span className="text-red-600 font-bold">{game.discount_price} MMK</span><span className="text-[10px] md:text-xs text-gray-400 line-through">{game.price} MMK</span></div>
-                            ) : (
-                              <span className="font-bold">{game.price} MMK</span>
-                            )}
-                          </td>
-                          <td className="p-4 text-xs text-gray-600 font-medium max-w-[200px] hidden md:table-cell">
-                            {game.collections.map(c => <span key={c} className="inline-block bg-gray-200 rounded px-2 py-1 mr-1 mb-1">{c}</span>)}
-                          </td>
-                          <td className="p-4 flex justify-end gap-2">
-                            <button onClick={() => handleEditClick(game)} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"><Edit className="h-4 w-4" /></button>
-                            <button onClick={() => handleDeleteGame(game.id)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"><Trash2 className="h-4 w-4" /></button>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="p-4 text-xs text-gray-600 font-medium max-w-[200px] hidden md:table-cell">
+                              {game.collections?.map(c => <span key={c} className="inline-block bg-gray-200 rounded px-2 py-1 mr-1 mb-1">{c}</span>)}
+                            </td>
+                            <td className="p-4 flex justify-end gap-2">
+                              <button onClick={() => handleEditClick(game)} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"><Edit className="h-4 w-4" /></button>
+                              <button onClick={() => handleDeleteGame(game.id)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"><Trash2 className="h-4 w-4" /></button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -531,7 +545,6 @@ const AdminPanel = ({ onBackToStore }) => {
             </div>
           )}
 
-          {/* --- ADD/EDIT GAME FORM --- */}
           {activeTab === 'games' && showGameForm && (
             <div className="max-w-4xl animate-in fade-in duration-300">
               <button onClick={resetForm} className="mb-6 text-sm font-bold text-blue-600 hover:underline">← Back to Catalog</button>
@@ -545,7 +558,6 @@ const AdminPanel = ({ onBackToStore }) => {
                     <label className="block text-sm font-bold text-gray-700">Game Cover Image</label>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                      {/* Option 1: File Upload */}
                       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
                         <p className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider">Option 1: Upload File</p>
                         <input 
@@ -562,7 +574,6 @@ const AdminPanel = ({ onBackToStore }) => {
                         />
                       </div>
 
-                      {/* Option 2: Paste URL */}
                       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-center">
                         <p className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider">Option 2: Paste Image URL</p>
                         <input 
@@ -640,7 +651,7 @@ const AdminPanel = ({ onBackToStore }) => {
                   
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-2">Game Size (GB)</label>
-                    <input type="text" required value={gameSize} onChange={(e) => setGameSize(e.target.value)} className="w-full rounded-xl border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 outline-none focus:border-black transition-colors" placeholder="e.g. 80GB" />
+                    <input type="text" value={gameSize} onChange={(e) => setGameSize(e.target.value)} className="w-full rounded-xl border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 outline-none focus:border-black transition-colors" placeholder="e.g. 80GB" />
                   </div>
                   
                   <div>

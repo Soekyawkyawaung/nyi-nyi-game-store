@@ -49,13 +49,16 @@ export default function Home() {
 
   const isPreOrder = (game) => game.collections?.some(c => c.toLowerCase().includes('pre-order') || c.toLowerCase().includes('preorder'));
 
-  const newGames = games.filter(game => game.collections.some(c => c.toLowerCase().includes('new games')) && !isPreOrder(game));
-  const ps5GamesCategory = games.filter(game => game.collections.some(c => c.toLowerCase().includes('ps5 games')) && !isPreOrder(game));
+  const newGames = games.filter(game => game.collections?.some(c => c.toLowerCase().includes('new games')) && !isPreOrder(game));
+  const ps5GamesCategory = games.filter(game => game.collections?.some(c => c.toLowerCase().includes('ps5 games')) && !isPreOrder(game));
   const preOrderGames = games.filter(game => isPreOrder(game));
+  
+  // FIXED: Re-added the PS4 Games filter logic!
+  const ps4GamesCategory = games.filter(game => game.collections?.some(c => c.toLowerCase().includes('ps4 games')) && !isPreOrder(game));
 
   const searchResults = games.filter(game => game.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
-  const allUniqueGenres = [...new Set(games.flatMap(g => g.collections.filter(c => c !== "PS4 Games" && c !== "PS5 Games")))];
+  const allUniqueGenres = [...new Set(games.flatMap(g => g.collections?.filter(c => c !== "PS4 Games" && c !== "PS5 Games") || []))];
   const priceRanges = ['10,000 - 50,000 MMK', '50,000 - 100,000 MMK', '100,000 - 150,000 MMK', 'Over 150,000 MMK'];
 
   const handleGameClick = (item) => {
@@ -98,7 +101,6 @@ export default function Home() {
   const filteredSeeAllGames = seeAllBaseGames.filter(item => {
     const isGift = !!item.options;
     
-    // Safely calculate price for both Games and Gift Cards
     let price = 0;
     if (isGift && item.options?.length > 0) {
       price = Math.min(...item.options.map(o => Number(o.price)));
@@ -119,13 +121,13 @@ export default function Home() {
 
     let matchesGenre = true;
     if (selectedGenres.length > 0 && !isGift) {
-      matchesGenre = selectedGenres.some(g => item.collections.includes(g));
+      matchesGenre = selectedGenres.some(g => item.collections?.includes(g));
     }
 
     let matchesPlatform = true;
     if (selectedPlatforms.length > 0 && !isGift) {
-      const hasPS4 = item.collections.includes("PS4 Games");
-      const hasPS5 = item.collections.includes("PS5 Games");
+      const hasPS4 = item.collections?.includes("PS4 Games");
+      const hasPS5 = item.collections?.includes("PS5 Games");
       matchesPlatform = (selectedPlatforms.includes('PS4') && hasPS4) || (selectedPlatforms.includes('PS5') && hasPS5);
     }
 
@@ -410,7 +412,7 @@ export default function Home() {
 
                   {/* --- WALLET TOP-UP BLOCK (HORIZONTAL SCROLL & UNIQUE ITEMS ONLY) --- */}
                   {giftCards.length > 0 && (
-                    <div className="mt-8 mb-12 animate-in fade-in duration-700">
+                    <div className="mt-8 mb-8 animate-in fade-in duration-700">
                       
                       <div className="px-4 flex justify-between items-end mb-4">
                         <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
@@ -423,7 +425,6 @@ export default function Home() {
                       
                       <div className="flex overflow-x-auto px-4 pb-4 gap-4 snap-x hide-scrollbar">
                         {giftCards.slice(0, 5).map((card) => {
-                          // Find the cheapest option to display
                           const lowestPrice = card.options && card.options.length > 0 
                             ? Math.min(...card.options.map(o => Number(o.price))) 
                             : 0;
@@ -446,6 +447,30 @@ export default function Home() {
                         })}
                       </div>
 
+                    </div>
+                  )}
+
+                  {/* --- FIXED: PS4 GAMES BLOCK --- */}
+                  {ps4GamesCategory.length > 0 && (
+                    <div className="mb-12 animate-in fade-in duration-700">
+                      <div className="px-4 flex justify-between items-end mb-4">
+                        <h2 className="text-lg font-bold text-gray-900">PS4 Games</h2>
+                        {ps4GamesCategory.length > 5 && (
+                          <button onClick={() => handleSeeAllClick('PS4 Games', ps4GamesCategory)} className="text-xs font-bold text-blue-600 hover:underline">See all &gt;</button>
+                        )}
+                      </div>
+                      <div className="flex overflow-x-auto px-4 pb-4 gap-4 snap-x hide-scrollbar">
+                        {ps4GamesCategory.slice(0, 10).map(game => (
+                          <div key={game.id} onClick={() => handleGameClick(game)} className="min-w-[140px] max-w-[140px] snap-start flex flex-col gap-2 cursor-pointer active:scale-95 transition-transform group relative">
+                            {renderPlatformTags(game.collections)}
+                            <div className="aspect-square w-full rounded-xl overflow-hidden bg-gray-100 shadow-sm border border-gray-100"><img src={game.cover_image} alt={game.name} className="h-full w-full object-cover group-hover:scale-110 transition-transform" /></div>
+                            <div>
+                              <h3 className="text-xs font-bold text-gray-900 truncate">{game.name}</h3>
+                              <p className="text-xs font-semibold text-[#e31818] mt-0.5">{game.discount_price || game.price} MMK</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
 

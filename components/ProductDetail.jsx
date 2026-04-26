@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, ShoppingCart, Heart, ChevronDown, ChevronUp, PlayCircle } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, Heart, ChevronDown, ChevronUp, PlayCircle, Image as ImageIcon, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -20,11 +20,27 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
   const shouldTruncate = game.description && game.description.length > DESCRIPTION_LIMIT;
   const [isPlayingTrailer, setIsPlayingTrailer] = useState(false);
 
+  // --- FIXED: UNIFIED GALLERY STATE ---
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
+
+  // Collect all images (Cover + Screenshots) into one array
+  const productImages = React.useMemo(() => {
+    const images = [];
+    if (game.cover_image || game.image) images.push(game.cover_image || game.image);
+    if (game.screenshots && Array.isArray(game.screenshots)) {
+      images.push(...game.screenshots.filter(url => url)); // Filter out empty strings
+    }
+    return images;
+  }, [game]);
+
   useEffect(() => {
     checkWishlistStatus();
     setIsExpanded(false); 
     setIsPlayingTrailer(false);
     setQuantity(1); 
+    setIsGalleryOpen(false);
+    setActiveGalleryIndex(0); // Reset correctly
 
     if (isGiftCard && game.options && game.options.length > 0) {
       setSelectedOption(prefilledOption || game.options[0]);
@@ -44,10 +60,7 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
   const handleToggleWishlist = async () => {
     if (isGiftCard) return; 
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      toast.error("Please sign in to add to wishlist");
-      return;
-    }
+    if (!session) return toast.error("Please sign in to add to wishlist");
 
     setIsWishlistLoading(true);
     try {
@@ -63,10 +76,9 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
     } catch (error) { toast.error("An error occurred"); } finally { setIsWishlistLoading(false); }
   };
 
-  // --- BULLETPROOF ADD TO CART LOGIC ---
   const handleAddToCart = async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return toast.error("Please sign in first");
+    if (!session) return toast.error("Please sign in to add to cart");
 
     setIsAddingCart(true);
     try {
@@ -78,44 +90,22 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
         quantity: isGiftCard ? quantity : 1 
       };
 
-      // Fetch the entire cart for this user to check manually (Prevents 406 Error)
-      const { data: userCart, error: fetchError } = await supabase
-        .from('cart')
-        .select('id, quantity, game_id, gift_card_id, selected_option')
-        .eq('user_id', session.user.id);
-        
-      if (fetchError) throw fetchError;
-
-      let existingCart = null;
-      if (userCart && userCart.length > 0) {
-        if (!isGiftCard) {
-          existingCart = userCart.find(c => c.game_id === game.id);
-        } else {
-          existingCart = userCart.find(c => c.gift_card_id === game.id && c.selected_option?.label === selectedOption.label);
-        }
-      }
+      let existingQuery = supabase.from('cart').select('id, quantity').eq('user_id', session.user.id);
+      if (!isGiftCard) existingQuery = existingQuery.eq('game_id', game.id);
+      else existingQuery = existingQuery.eq('gift_card_id', game.id).eq('selected_option->>label', selectedOption.label);
+      
+      const { data: existingCart } = await existingQuery.maybeSingle();
       
       if (existingCart) {
-        // If it exists, update the quantity
-        const newQuantity = (existingCart.quantity || 1) + (isGiftCard ? quantity : 1);
-        const { error } = await supabase.from('cart').update({ quantity: newQuantity }).eq('id', existingCart.id);
-        if (error) throw error;
+        await supabase.from('cart').update({ quantity: existingCart.quantity + (isGiftCard ? quantity : 1) }).eq('id', existingCart.id);
         toast.success("Cart updated!");
       } else {
-        // If it doesn't exist, insert the new row
         const { error } = await supabase.from('cart').insert([cartData]);
         if (error) throw error;
         toast.success("Added to Cart!");
       }
-      
-      // Trigger Header Update
       window.dispatchEvent(new Event('cartUpdated'));
-    } catch (error) { 
-      console.error("Cart Error:", error);
-      toast.error("Failed to add to cart"); 
-    } finally { 
-      setIsAddingCart(false); 
-    }
+    } catch (error) { toast.error("Failed to add to cart"); } finally { setIsAddingCart(false); }
   };
 
   const handleBuyNow = async () => {
@@ -134,16 +124,17 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
   const isPreOrder = game.collections?.some(c => c.toLowerCase().includes('pre-order') || c.toLowerCase().includes('preorder'));
   const recommendedGames = allGames.filter(g => g.id !== game.id && !g.options).slice(0, 6);
 
+  // Pure Nyi Nyi Pricing Logic
   const currentBasePrice = isGiftCard 
     ? (selectedOption ? Number(selectedOption.price) : 0)
     : (game.discount_price || game.price);
+  
   const totalPrice = currentBasePrice * (isGiftCard ? quantity : 1);
 
   return (
     <div className="flex flex-col min-h-screen bg-white pb-32 animate-in fade-in duration-300">
       
-      {/* Top Header */}
-      <div className="sticky top-0 z-50 flex items-center justify-between bg-white px-4 py-4 shadow-sm border-b border-gray-100">
+      <div className="sticky top-0 z-40 flex items-center justify-between bg-white px-4 py-4 shadow-sm border-b border-gray-100">
         <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-gray-100 active:scale-95"><ArrowLeft className="h-6 w-6 text-gray-800" /></button>
         <h1 className="text-sm font-black text-gray-900 truncate px-4 uppercase">{game.name}</h1>
         {!isGiftCard ? (
@@ -153,9 +144,20 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
         ) : <div className="w-10"></div>}
       </div>
 
-      {/* Image Display */}
-      <div className={`w-full aspect-square bg-gray-50 flex items-center justify-center ${isGiftCard ? 'p-12' : ''}`}>
-        <img src={game.cover_image || game.image} alt={game.name} className={isGiftCard ? "w-full h-full object-contain drop-shadow-lg" : "w-full h-full object-cover"} />
+      <div 
+        className={`w-full aspect-square bg-gray-50 flex items-center justify-center relative overflow-hidden cursor-pointer ${isGiftCard ? 'p-12' : ''}`}
+        onClick={() => {
+           if (productImages.length > 0) {
+             setActiveGalleryIndex(0);
+             setIsGalleryOpen(true);
+           }
+        }}
+      >
+        <img 
+            src={game.cover_image || game.image} 
+            alt={game.name} 
+            className={isGiftCard ? "w-full h-full object-contain drop-shadow-xl" : "w-full h-full object-cover"} 
+        />
       </div>
 
       <div className="p-5">
@@ -169,7 +171,7 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
                 <button 
                   key={idx}
                   onClick={() => setSelectedOption(opt)}
-                  className={`p-4 rounded-xl border-2 text-left transition-all ${selectedOption?.label === opt.label ? 'border-[#e31818] bg-[#e31818] text-white shadow-lg' : 'border-gray-100 bg-white text-gray-600'}`}
+                  className={`py-4 px-3 rounded-2xl border-2 text-center transition-all ${selectedOption?.label === opt.label ? 'border-[#e31818] bg-[#e31818] text-white shadow-lg' : 'border-gray-100 bg-white text-gray-600'}`}
                 >
                   <p className="text-[10px] font-bold opacity-70 mb-1">{opt.label}</p>
                   <p className="text-sm font-black">{Number(opt.price).toLocaleString()} MMK</p>
@@ -177,7 +179,6 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
               ))}
             </div>
 
-            {/* QUANTITY SELECTOR */}
             <div className="flex justify-center">
               <div className="flex items-center gap-6 bg-gray-50 rounded-full px-5 py-2.5 border border-gray-200 shadow-inner">
                 <button onClick={() => setQuantity(q => Math.max(1, q - 1))} className="w-9 h-9 flex items-center justify-center rounded-full bg-white text-gray-600 hover:text-[#e31818] hover:bg-red-50 shadow border border-gray-200 font-bold text-2xl transition-colors active:scale-95">-</button>
@@ -199,7 +200,6 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
           </div>
         )}
 
-        {/* Tags */}
         {!isGiftCard && (
           <div className="flex flex-wrap gap-2 mb-6">
             {game.size && <span className="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded">{game.size}</span>}
@@ -209,7 +209,28 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
           </div>
         )}
 
-        {/* INLINE GAME TRAILER */}
+        {/* PRODUCT GALLERY THUMBNAILS (IN PAGE) */}
+        {!isGiftCard && productImages.length > 1 && (
+            <div className="mb-8 border-t border-gray-100 pt-6 animate-in fade-in duration-500">
+                <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4">Product Gallery</h3>
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
+                    {productImages.map((imgUrl, index) => (
+                        <button 
+                            key={index} 
+                            onClick={() => {
+                                setActiveGalleryIndex(index);
+                                setIsGalleryOpen(true);
+                            }}
+                            className={`aspect-[4/3] rounded-lg overflow-hidden border-2 bg-gray-50 flex items-center justify-center relative transition-all ${activeGalleryIndex === index ? 'border-[#e31818] shadow-md ring-2 ring-red-100' : 'border-gray-100 hover:border-gray-300'}`}
+                        >
+                            <img src={imgUrl} alt={`Screenshot ${index + 1}`} className="max-h-full max-w-full object-contain" />
+                            {index === 0 && <span className="absolute top-1 left-1 bg-gray-900/80 text-white text-[7px] font-bold px-1.5 py-0.5 rounded">Cover</span>}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        )}
+
         {!isGiftCard && game.youtube_link && (
           <div className="mb-6 border-t border-gray-100 pt-6">
             <h3 className="text-lg font-bold text-gray-900 mb-3">Official Trailer</h3>
@@ -218,14 +239,13 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
                 <PlayCircle className="h-5 w-5" /> Watch Trailer
               </button>
             ) : isPlayingTrailer && youtubeId ? (
-              <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-black shadow-sm">
+              <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-black shadow-sm border border-gray-100">
                 <iframe src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1`} className="absolute top-0 left-0 w-full h-full border-0" allow="autoplay; encrypted-media" allowFullScreen></iframe>
               </div>
             ) : null}
           </div>
         )}
 
-        {/* Description */}
         <div className="mb-6 pt-4 border-t border-gray-100">
           <h3 className="text-sm font-black text-gray-900 mb-2">Product Info</h3>
           <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">
@@ -278,6 +298,50 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
           </button>
         </div>
       </div>
+
+      {/* --- PREMIUM FULL SCREEN LIGHTBOX (VERTICALLY SCROLLABLE) --- */}
+      {isGalleryOpen && (
+        <div className="fixed inset-0 z-[999] bg-[#121212] flex flex-col animate-in fade-in duration-200">
+          
+          {/* Header Overlay */}
+          <div className="flex items-center justify-between p-4 absolute top-0 w-full z-10 pointer-events-none">
+            <div className="text-sm font-bold text-white tracking-widest px-3 py-1 bg-black/60 backdrop-blur-md rounded-lg pointer-events-auto shadow-sm">
+              {activeGalleryIndex + 1} <span className="text-gray-400 mx-1">/</span> {productImages.length}
+            </div>
+            <button 
+              onClick={() => setIsGalleryOpen(false)} 
+              className="p-2 bg-black/60 backdrop-blur-md rounded-full hover:bg-white/20 transition-colors pointer-events-auto shadow-sm"
+            >
+              <X className="w-6 h-6 text-white" />
+            </button>
+          </div>
+          
+          {/* Main Vertically Scrollable Area */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col items-center justify-start pt-20 pb-4">
+            <img 
+              src={productImages[activeGalleryIndex]} 
+              alt={`Screenshot ${activeGalleryIndex + 1}`} 
+              className="w-full h-auto object-contain max-w-2xl" 
+            />
+          </div>
+
+          {/* Bottom Thumbnail Bar */}
+          <div className="bg-[#0a0a0a] border-t border-gray-800 pb-8 pt-4">
+            <p className="text-center text-white/70 text-[10px] font-bold mb-3 uppercase tracking-widest">Screenshot</p>
+            <div className="flex overflow-x-auto px-4 gap-3 snap-x hide-scrollbar justify-start md:justify-center">
+              {productImages.map((imgUrl, idx) => (
+                <button 
+                  key={idx}
+                  onClick={() => setActiveGalleryIndex(idx)}
+                  className={`snap-center flex-shrink-0 w-24 h-16 rounded-lg overflow-hidden transition-all duration-300 ${activeGalleryIndex === idx ? 'border-2 border-white opacity-100 scale-105 shadow-lg' : 'border-2 border-transparent opacity-40 hover:opacity-100'}`}
+                >
+                  <img src={imgUrl} className="w-full h-full object-cover" alt={`Thumb ${idx}`} />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

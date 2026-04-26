@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Gamepad2, Image as ImageIcon, PlusCircle, Save, LogOut, Loader2, Tags, Trash2, Edit, ShoppingBag, Search, Filter, CreditCard, Plus, X, Menu } from 'lucide-react';
+import { Gamepad2, Image as ImageIcon, PlusCircle, Save, LogOut, Loader2, Tags, Trash2, Edit, ShoppingBag, Search, Filter, CreditCard, Plus, X, Menu, UploadCloud } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -17,13 +17,14 @@ const AdminPanel = ({ onBackToStore }) => {
   const [orderYear, setOrderYear] = useState('');
   
   const [gamesList, setGamesList] = useState([]);
-  const [gameSearch, setGameSearch] = useState(''); // NEW: Game Search State
+  const [gameSearch, setGameSearch] = useState(''); 
   const [isLoadingGames, setIsLoadingGames] = useState(true);
   const [showGameForm, setShowGameForm] = useState(false);
   const [editGameId, setEditGameId] = useState(null); 
   const [gameName, setGameName] = useState('');
   const [price, setPrice] = useState('');
   const [discountPrice, setDiscountPrice] = useState('');
+  
   const [youtubeLink, setYoutubeLink] = useState('');
   const [description, setDescription] = useState('');
   const [gameSize, setGameSize] = useState('');
@@ -34,6 +35,12 @@ const AdminPanel = ({ onBackToStore }) => {
   const [coverUrlInput, setCoverUrlInput] = useState(''); 
   const [coverPreview, setCoverPreview] = useState(null); 
   
+  // --- SCREENSHOTS STATE (Max 6) ---
+  const [screenshotInputs, setScreenshotInputs] = useState(() => 
+    Array.from({ length: 6 }, () => ({ file: null, url: '', preview: null }))
+  );
+  const [existingScreenshots, setExistingScreenshots] = useState([]); 
+
   const [isSavingGame, setIsSavingGame] = useState(false);
 
   const [isPS5, setIsPS5] = useState(false);
@@ -100,7 +107,6 @@ const AdminPanel = ({ onBackToStore }) => {
     return matchesSearch && matchesMonth && matchesYear;
   });
 
-  // NEW: Filter games based on search input
   const filteredGames = gamesList.filter(game => {
     const searchLower = gameSearch.toLowerCase();
     return game.name.toLowerCase().includes(searchLower) || 
@@ -118,6 +124,25 @@ const AdminPanel = ({ onBackToStore }) => {
       setSelectedOrder(null);
       fetchOrders(); 
     } catch (error) { toast.error(error.message); }
+  };
+
+  const handleScreenshotFileChange = (index, file) => {
+    if (!file) return;
+    setScreenshotInputs(prev => prev.map((item, i) => 
+      i === index ? { ...item, file: file, preview: URL.createObjectURL(file), url: '' } : item
+    ));
+  };
+
+  const handleScreenshotUrlChange = (index, url) => {
+    setScreenshotInputs(prev => prev.map((item, i) => 
+      i === index ? { ...item, url: url, preview: url, file: null } : item
+    ));
+  };
+
+  const clearScreenshotSlot = (index) => {
+    setScreenshotInputs(prev => prev.map((item, i) => 
+      i === index ? { file: null, url: '', preview: null } : item
+    ));
   };
 
   const handleSaveGame = async (e) => {
@@ -139,6 +164,22 @@ const AdminPanel = ({ onBackToStore }) => {
         finalCoverUrl = coverUrlInput;
       }
 
+      // SCREENSHOTS
+      let finalScreenshotUrls = [];
+      for (let i = 0; i < screenshotInputs.length; i++) {
+        const input = screenshotInputs[i];
+        if (input.file) {
+          const fileExt = input.file.name.split('.').pop();
+          const fileName = `ss-${i+1}-${Date.now()}.${fileExt}`;
+          const { error: ssUploadError } = await supabase.storage.from('game_covers').upload(fileName, input.file);
+          if (ssUploadError) throw ssUploadError;
+          const { data: { publicUrl } } = supabase.storage.from('game_covers').getPublicUrl(fileName);
+          finalScreenshotUrls.push(publicUrl);
+        } else if (input.url) {
+          finalScreenshotUrls.push(input.url);
+        }
+      }
+
       let collectionsArray = collections.split(',').map(tag => tag.trim()).filter(tag => tag !== "");
       if (isPS5) collectionsArray.push("PS5 Games");
       if (isPS4) collectionsArray.push("PS4 Games");
@@ -152,6 +193,7 @@ const AdminPanel = ({ onBackToStore }) => {
         youtube_link: youtubeLink,
         description: description,
         collections: collectionsArray,
+        screenshots: finalScreenshotUrls, 
       };
 
       if (finalCoverUrl) gameData.cover_image = finalCoverUrl;
@@ -169,7 +211,10 @@ const AdminPanel = ({ onBackToStore }) => {
 
       resetForm();
       fetchGames();
-    } catch (error) { toast.error(error.message); } finally { setIsSavingGame(false); }
+    } catch (error) { 
+      console.error(error);
+      toast.error(error.message); 
+    } finally { setIsSavingGame(false); }
   };
 
   const handleDeleteGame = async (id) => {
@@ -188,14 +233,24 @@ const AdminPanel = ({ onBackToStore }) => {
     setYoutubeLink(game.youtube_link || '');
     setDescription(game.description || '');
     
-    const textCollections = game.collections.filter(tag => tag !== "PS5 Games" && tag !== "PS4 Games").join(', ');
+    const textCollections = game.collections?.filter(tag => tag !== "PS5 Games" && tag !== "PS4 Games").join(', ') || '';
     setCollections(textCollections);
-    setIsPS5(game.collections.includes("PS5 Games"));
-    setIsPS4(game.collections.includes("PS4 Games"));
+    setIsPS5(game.collections?.includes("PS5 Games") || false);
+    setIsPS4(game.collections?.includes("PS4 Games") || false);
 
     setCoverFile(null); 
     setCoverUrlInput(''); 
     setCoverPreview(game.cover_image); 
+
+    const existingSs = game.screenshots || [];
+    setExistingScreenshots(existingSs);
+    setScreenshotInputs(prev => prev.map((item, i) => {
+      if (existingSs[i]) {
+        return { file: null, url: existingSs[i], preview: existingSs[i] };
+      }
+      return { file: null, url: '', preview: null };
+    }));
+
     setShowGameForm(true);
   };
 
@@ -203,7 +258,10 @@ const AdminPanel = ({ onBackToStore }) => {
     setEditGameId(null); setGameName(''); setPrice(''); setDiscountPrice(''); 
     setYoutubeLink(''); setDescription(''); setGameSize(''); setCollections(''); 
     setIsPS5(false); setIsPS4(false); 
-    setCoverFile(null); setCoverUrlInput(''); setCoverPreview(null); setShowGameForm(false);
+    setCoverFile(null); setCoverUrlInput(''); setCoverPreview(null); 
+    setScreenshotInputs(Array.from({ length: 6 }, () => ({ file: null, url: '', preview: null })));
+    setExistingScreenshots([]);
+    setShowGameForm(false);
   };
 
   const handleQuickAddCollection = (tag) => {
@@ -485,7 +543,6 @@ const AdminPanel = ({ onBackToStore }) => {
                 </button>
               </div>
 
-              {/* NEW: GAME SEARCH BAR */}
               <div className="flex flex-col md:flex-row gap-4 mb-6 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
                 <div className="flex flex-1 items-center rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
                   <Search className="h-5 w-5 text-gray-400" />
@@ -519,7 +576,12 @@ const AdminPanel = ({ onBackToStore }) => {
                                   <div className="absolute top-0.5 left-0.5 bg-gray-800/80 text-white text-[8px] font-bold px-1 py-[1px] rounded shadow hidden md:block">{getPlatformTags(game.collections)}</div>
                                 )}
                               </div>
-                              <span className="font-bold text-sm md:text-base text-gray-900 truncate max-w-[150px] md:max-w-xs">{game.name}</span>
+                              <div className="flex flex-col">
+                                <span className="font-bold text-sm md:text-base text-gray-900 truncate max-w-[150px] md:max-w-xs">{game.name}</span>
+                                <div className="text-[10px] text-gray-400 mt-0.5 hidden md:block">
+                                  {game.collections?.filter(t => t !== "PS5 Games" && t !== "PS4 Games").join(', ')}
+                                </div>
+                              </div>
                             </td>
                             <td className="p-4 text-sm font-semibold text-gray-900">
                               {game.discount_price ? (
@@ -545,6 +607,7 @@ const AdminPanel = ({ onBackToStore }) => {
             </div>
           )}
 
+          {/* --- ADD/EDIT GAME FORM --- */}
           {activeTab === 'games' && showGameForm && (
             <div className="max-w-4xl animate-in fade-in duration-300">
               <button onClick={resetForm} className="mb-6 text-sm font-bold text-blue-600 hover:underline">← Back to Catalog</button>
@@ -555,7 +618,7 @@ const AdminPanel = ({ onBackToStore }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   
                   <div className="col-span-1 md:col-span-2 flex flex-col gap-4 p-4 border border-gray-100 rounded-xl bg-gray-50">
-                    <label className="block text-sm font-bold text-gray-700">Game Cover Image</label>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Game Cover Image</label>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
@@ -591,8 +654,8 @@ const AdminPanel = ({ onBackToStore }) => {
                     </div>
 
                     {coverPreview && (
-                      <div className="w-full h-64 md:h-80 rounded-xl overflow-hidden bg-white border-2 border-dashed border-gray-200 p-2 relative mt-2">
-                        <img src={coverPreview} alt="Preview" className="w-full h-full object-contain" />
+                      <div className="w-full h-64 md:h-80 rounded-xl overflow-hidden bg-white border-2 border-dashed border-gray-200 p-2 relative mt-2 flex items-center justify-center">
+                        <img src={coverPreview} alt="Preview" className="max-h-full max-w-full object-contain" />
                         {(isPS5 || isPS4) && (
                           <div className="absolute top-4 left-4 bg-gray-800/90 text-white text-sm md:text-xl font-extrabold px-4 py-2 rounded-xl shadow-xl border border-gray-700">
                             {isPS4 && <span>PS4</span>}
@@ -604,7 +667,60 @@ const AdminPanel = ({ onBackToStore }) => {
                     )}
                   </div>
 
-                  <div className="col-span-1 md:col-span-2">
+                  <div className="col-span-1 md:col-span-2 flex flex-col gap-4 p-5 border border-dashed border-gray-200 rounded-2xl bg-gray-50/50 mt-4">
+                    <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-4 mb-2">
+                      <h4 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                        <ImageIcon className="w-5 h-5 text-[#e31818]" /> Game Screenshots <span className="text-xs text-gray-500 font-medium">(Max 6 photos, optional)</span>
+                      </h4>
+                      <span className="text-xs font-bold text-gray-400">Will appear above Trailer</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {screenshotInputs.map((input, index) => (
+                        <div key={index} className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm relative animate-in fade-in duration-300">
+                          <div className="flex items-center justify-between mb-4">
+                            <span className="flex items-center justify-center w-7 h-7 rounded-full bg-gray-900 text-white text-xs font-bold">{index + 1}</span>
+                            {input.preview && (
+                              <button type="button" onClick={() => clearScreenshotSlot(index)} className="p-1.5 rounded-full bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-[#e31818]">
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+
+                          {input.preview ? (
+                            <div className="w-full aspect-video rounded-lg overflow-hidden bg-gray-50 border border-gray-100 mb-4 flex items-center justify-center p-2 relative group">
+                              <img src={input.preview} alt={`Screenshot ${index + 1}`} className="max-h-full max-w-full object-contain" />
+                              {input.file && <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[9px] px-2 py-0.5 rounded font-medium">File Uploaded</span>}
+                              {input.url && <span className="absolute bottom-2 right-2 bg-blue-600/70 text-white text-[9px] px-2 py-0.5 rounded font-medium">External URL</span>}
+                            </div>
+                          ) : (
+                            <div className="w-full aspect-video rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 mb-4 flex flex-col items-center justify-center gap-2 text-gray-400">
+                                <UploadCloud className="w-8 h-8 opacity-60" />
+                                <span className="text-xs font-bold">Slot {index+1} Empty</span>
+                            </div>
+                          )}
+
+                          <div className="space-y-3">
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              onChange={(e) => handleScreenshotFileChange(index, e.target.files[0])} 
+                              className="w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 cursor-pointer" 
+                            />
+                            <input 
+                              type="url" 
+                              value={input.url}
+                              onChange={(e) => handleScreenshotUrlChange(index, e.target.value)}
+                              placeholder={`Or paste image URL for Screenshot ${index+1}...`}
+                              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-900 outline-none focus:border-black transition-colors"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="col-span-1 md:col-span-2 mt-4">
                     <label className="block text-sm font-bold text-gray-700 mb-2">Game Name</label>
                     <input type="text" required value={gameName} onChange={(e) => setGameName(e.target.value)} className="w-full rounded-xl border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 outline-none focus:border-black transition-colors" placeholder="e.g. Spiderman 2" />
                   </div>
@@ -625,7 +741,7 @@ const AdminPanel = ({ onBackToStore }) => {
 
                   <div className="col-span-1 md:col-span-2">
                     <label className="block text-sm font-bold text-gray-700 mb-2">Collections (Separate with commas)</label>
-                    <input type="text" required value={collections} onChange={(e) => setCollections(e.target.value)} className="w-full rounded-xl border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 outline-none focus:border-black transition-colors" placeholder="e.g. Action, Classic" />
+                    <input type="text" value={collections} onChange={(e) => setCollections(e.target.value)} className="w-full rounded-xl border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 outline-none focus:border-black transition-colors" placeholder="e.g. Action, Classic" />
                     
                     {uniqueCollections.length > 0 && (
                       <div className="mt-3 flex flex-wrap items-center gap-2">

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { UploadCloud, Loader2, CheckCircle, Check } from 'lucide-react';
+import { UploadCloud, Loader2, CheckCircle, Receipt, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -10,7 +10,7 @@ const Checkout = () => {
   const [totalPrice, setTotalPrice] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   
-  const [paymentMethod] = useState('kbzpay'); // Fixed to KBZPay only
+  const [paymentMethod, setPaymentMethod] = useState('kbzpay'); 
   const [screenshotPreview, setScreenshotPreview] = useState(null);
   const [screenshotFile, setScreenshotFile] = useState(null); 
   const [isSubmitting, setIsSubmitting] = useState(false);

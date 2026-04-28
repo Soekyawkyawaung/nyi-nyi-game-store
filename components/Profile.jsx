@@ -16,6 +16,13 @@ const Profile = ({ onBack }) => {
   const [isUpdating, setIsUpdating] = useState(false); 
   const [avatarUrl, setAvatarUrl] = useState(null);
 
+  // --- HAPTIC FEEDBACK HELPER ---
+  const triggerHaptic = (pattern = 50) => {
+    if (typeof window !== 'undefined' && navigator.vibrate) {
+      try { navigator.vibrate(pattern); } catch (e) {}
+    }
+  };
+
   useEffect(() => {
     const getUserData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -34,6 +41,7 @@ const Profile = ({ onBack }) => {
   const handleFileUpload = async (e) => {
     try {
       if (!e.target.files || e.target.files.length === 0) return;
+      triggerHaptic(30); // Tap on select
       const file = e.target.files[0];
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}-${Math.random()}.${fileExt}`;
@@ -57,8 +65,10 @@ const Profile = ({ onBack }) => {
         data: { avatar_url: publicUrl }
       });
 
+      triggerHaptic([50, 50, 50]); // Success double tap
       toast.success(lang === 'mm' ? "ဓာတ်ပုံ ပြောင်းလဲပြီးပါပြီ" : lang === 'zh' ? "照片已更新" : "Photo updated!");
     } catch (error) {
+      triggerHaptic(200); // Error buzz
       toast.error(error.message);
     } finally {
       setIsUpdating(false);
@@ -74,8 +84,11 @@ const Profile = ({ onBack }) => {
     });
 
     setIsUpdating(false);
-    if (error) toast.error(error.message);
-    else {
+    if (error) {
+      triggerHaptic(200);
+      toast.error(error.message);
+    } else {
+      triggerHaptic([50, 50, 50]);
       toast.success(lang === 'mm' ? "အချက်အလက်များ သိမ်းဆည်းပြီးပါပြီ" : lang === 'zh' ? "详细信息已保存" : "Details saved!");
       await supabase.auth.refreshSession();
     }
@@ -89,14 +102,18 @@ const Profile = ({ onBack }) => {
       password: oldPassword,
     });
     if (signInError) {
+      triggerHaptic(200);
       toast.error(lang === 'mm' ? "လက်ရှိစကားဝှက် မှားယွင်းနေပါသည်" : lang === 'zh' ? "当前密码不正确" : "Current password incorrect!");
       setIsUpdating(false);
       return;
     }
     const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
     setIsUpdating(false);
-    if (updateError) toast.error(updateError.message);
-    else {
+    if (updateError) {
+      triggerHaptic(200);
+      toast.error(updateError.message);
+    } else {
+      triggerHaptic([50, 50, 50]);
       toast.success(lang === 'mm' ? "စကားဝှက် ပြောင်းလဲပြီးပါပြီ" : lang === 'zh' ? "密码已更新" : "Password updated!");
       setOldPassword('');
       setNewPassword('');
@@ -111,7 +128,7 @@ const Profile = ({ onBack }) => {
 
   return (
     <div className="flex min-h-screen w-full flex-col items-center bg-white dark:bg-[#121212] px-4 py-6 transition-colors duration-300">
-      <button onClick={onBack} className="mb-6 self-start text-sm font-bold text-blue-600 dark:text-blue-400 hover:underline">
+      <button onClick={() => { triggerHaptic(30); onBack(); }} className="mb-6 self-start text-sm font-bold text-blue-600 dark:text-blue-400 hover:underline">
         ← {lang === 'mm' ? 'စတိုးသို့ ပြန်သွားရန်' : lang === 'zh' ? '返回商店' : 'Back to Store'}
       </button>
 

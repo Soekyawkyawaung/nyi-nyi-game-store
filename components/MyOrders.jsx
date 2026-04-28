@@ -11,6 +11,13 @@ const MyOrders = ({ onBack }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [deliveryPopup, setDeliveryPopup] = useState(null); 
 
+  // --- HAPTIC FEEDBACK HELPER ---
+  const triggerHaptic = (pattern = 50) => {
+    if (typeof window !== 'undefined' && navigator.vibrate) {
+      try { navigator.vibrate(pattern); } catch (e) {}
+    }
+  };
+
   useEffect(() => {
     fetchOrders();
   }, []);
@@ -27,7 +34,7 @@ const MyOrders = ({ onBack }) => {
   return (
     <div className="flex min-h-screen flex-col bg-gray-50 dark:bg-[#0a0a0a] pb-20 animate-in slide-in-from-right duration-300 relative transition-colors">
       <div className="sticky top-0 z-40 flex items-center bg-white dark:bg-[#121212] px-4 py-4 shadow-sm border-b border-gray-100 dark:border-gray-800 transition-colors">
-        <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"><ArrowLeft className="h-6 w-6 text-gray-800 dark:text-gray-200" /></button>
+        <button onClick={() => { triggerHaptic(30); onBack(); }} className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"><ArrowLeft className="h-6 w-6 text-gray-800 dark:text-gray-200" /></button>
         <h1 className="ml-2 text-xl font-black text-gray-900 dark:text-white">{t('orders')}</h1>
       </div>
 
@@ -92,7 +99,7 @@ const MyOrders = ({ onBack }) => {
 
                   {order.status === 'paid' && order.delivery_info && (
                     <button 
-                      onClick={() => setDeliveryPopup({ orderNo: order.order_no, info: order.delivery_info })}
+                      onClick={() => { triggerHaptic(30); setDeliveryPopup({ orderNo: order.order_no, info: order.delivery_info }); }}
                       className="mt-2 w-full flex items-center justify-center gap-2 rounded-xl bg-green-600 dark:bg-green-700 py-3.5 text-sm font-bold text-white shadow-md hover:bg-green-700 dark:hover:bg-green-600 active:scale-95 transition-all"
                     >
                       <Key className="h-4 w-4" /> 
@@ -127,7 +134,7 @@ const MyOrders = ({ onBack }) => {
             </div>
 
             <button 
-              onClick={() => setDeliveryPopup(null)}
+              onClick={() => { triggerHaptic(30); setDeliveryPopup(null); }}
               className="w-full rounded-xl bg-black dark:bg-white py-3.5 font-bold text-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-200 active:scale-95 transition-all"
             >
               {lang === 'mm' ? 'ပိတ်မည်' : lang === 'zh' ? '关闭' : 'Close'}

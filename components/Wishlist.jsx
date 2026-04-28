@@ -12,6 +12,13 @@ const Wishlist = ({ onBack, onGameClick }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState(null);
 
+  // --- HAPTIC FEEDBACK HELPER ---
+  const triggerHaptic = (pattern = 50) => {
+    if (typeof window !== 'undefined' && navigator.vibrate) {
+      try { navigator.vibrate(pattern); } catch (e) {}
+    }
+  };
+
   useEffect(() => {
     fetchWishlist();
   }, []);
@@ -40,8 +47,10 @@ const Wishlist = ({ onBack, onGameClick }) => {
   const handleRemove = async (wishlistId) => {
     const { error } = await supabase.from('wishlist').delete().eq('id', wishlistId);
     if (error) {
+      triggerHaptic(200); // Error buzz
       toast.error("Error");
     } else {
+      triggerHaptic([100, 50, 100]); // Heavy double tap for remove
       toast.success(lang === 'mm' ? "ဖယ်ရှားပြီးပါပြီ" : lang === 'zh' ? "已移除" : "Removed from wishlist");
       setWishlistItems(prev => prev.filter(item => item.id !== wishlistId));
     }
@@ -51,14 +60,17 @@ const Wishlist = ({ onBack, onGameClick }) => {
     try {
       const { error } = await supabase.from('cart').insert([{ user_id: user.id, game_id: gameId }]);
       if (error && error.code === '23505') {
+        triggerHaptic(200); // Error buzz
         toast.success(lang === 'mm' ? "ခြင်းတောင်းထဲတွင် ရှိပြီးသားပါ!" : lang === 'zh' ? "已经在您的购物车中！" : "Already in your cart!");
       } else if (error) {
         throw error;
       } else {
+        triggerHaptic([50, 50, 50]); // Success double tap
         toast.success(lang === 'mm' ? "ခြင်းတောင်းသို့ ထည့်ပြီးပါပြီ!" : lang === 'zh' ? "已加入购物车！" : "Added to Cart!");
         window.dispatchEvent(new Event('cartUpdated')); 
       }
     } catch (error) {
+      triggerHaptic(200);
       toast.error("Error");
     }
   };
@@ -66,7 +78,7 @@ const Wishlist = ({ onBack, onGameClick }) => {
   return (
     <div className="flex min-h-screen flex-col bg-gray-50 dark:bg-[#0a0a0a] pb-20 animate-in slide-in-from-right duration-300 transition-colors">
       <div className="sticky top-0 z-50 flex items-center bg-white dark:bg-[#121212] px-4 py-4 shadow-sm border-b border-gray-100 dark:border-gray-800 transition-colors">
-        <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-all">
+        <button onClick={() => { triggerHaptic(30); onBack(); }} className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-all">
           <ArrowLeft className="h-6 w-6 text-gray-800 dark:text-gray-200" />
         </button>
         <h1 className="ml-2 text-xl font-black text-gray-900 dark:text-white">{t('wishlist')}</h1>
@@ -83,7 +95,7 @@ const Wishlist = ({ onBack, onGameClick }) => {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
               {lang === 'mm' ? 'ဝယ်ယူလိုသော ဂိမ်းများကို သိမ်းဆည်းထားပါ!' : lang === 'zh' ? '保存您想稍后购买的物品！' : 'Save items you want to buy later!'}
             </p>
-            <button onClick={onBack} className="mt-6 rounded-xl bg-[#e31818] px-6 py-3 font-bold text-white hover:bg-red-700 transition-colors active:scale-95">
+            <button onClick={() => { triggerHaptic(30); onBack(); }} className="mt-6 rounded-xl bg-[#e31818] px-6 py-3 font-bold text-white hover:bg-red-700 transition-colors active:scale-95">
               {lang === 'mm' ? 'ဂိမ်းများ ရှာဖွေမည်' : lang === 'zh' ? '探索游戏' : 'Explore Games'}
             </button>
           </div>
@@ -91,11 +103,11 @@ const Wishlist = ({ onBack, onGameClick }) => {
           <div className="flex flex-col gap-4">
             {wishlistItems.map((item) => (
               <div key={item.id} className="flex overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-[#121212] shadow-sm transition-colors">
-                <div onClick={() => onGameClick(item.games)} className="w-1/3 cursor-pointer bg-gray-100 dark:bg-gray-800 aspect-square">
+                <div onClick={() => { triggerHaptic(30); onGameClick(item.games); }} className="w-1/3 cursor-pointer bg-gray-100 dark:bg-gray-800 aspect-square">
                   <img src={item.games.cover_image} alt={item.games.name} className="h-full w-full object-cover" />
                 </div>
                 <div className="flex w-2/3 flex-col justify-between p-3">
-                  <div onClick={() => onGameClick(item.games)} className="cursor-pointer">
+                  <div onClick={() => { triggerHaptic(30); onGameClick(item.games); }} className="cursor-pointer">
                     <h3 className="text-sm font-bold text-gray-900 dark:text-white leading-tight truncate">{item.games.name}</h3>
                     <p className="mt-1 text-sm font-extrabold text-[#e31818]">{item.games.discount_price || item.games.price} MMK</p>
                   </div>

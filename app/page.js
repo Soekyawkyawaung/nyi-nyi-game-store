@@ -89,6 +89,13 @@ export default function Home() {
   const [selectedGenres, setSelectedGenres] = useState([]);
   const [selectedPlatforms, setSelectedPlatforms] = useState([]);
 
+  // --- HAPTIC FEEDBACK HELPER ---
+  const triggerHaptic = (pattern = 50) => {
+    if (typeof window !== 'undefined' && navigator.vibrate) {
+      try { navigator.vibrate(pattern); } catch (e) {}
+    }
+  };
+
   useEffect(() => {
     const fetchStoreData = async () => {
       setIsLoading(true);
@@ -153,7 +160,6 @@ export default function Home() {
   const allUniqueGenres = [...new Set(games.flatMap(g => g.collections?.filter(c => c !== "PS4 Games" && c !== "PS5 Games") || []))];
   const priceRanges = ['10,000 - 50,000 MMK', '50,000 - 100,000 MMK', '100,000 - 150,000 MMK', 'Over 150,000 MMK'];
 
-  // --- SMART RECOMMENDATIONS ---
   let dynamicRecs = ps5GamesCategory.slice(0, 6);
   if (recentlyViewed.length > 0 && games.length > 0) {
     const lastGenre = recentlyViewed[0].collections?.filter(t => t !== 'PS4 Games' && t !== 'PS5 Games')[0];
@@ -163,6 +169,7 @@ export default function Home() {
   const visibleRecs = dynamicRecs.slice(recPage * 3, recPage * 3 + 3);
 
   const handleGameClick = (item) => {
+    triggerHaptic(30); // Light tap when clicking a game
     let recent = [...recentlyViewed].filter(g => g.id !== item.id); 
     recent.unshift(item); 
     recent = recent.slice(0, 5); 
@@ -175,12 +182,14 @@ export default function Home() {
   };
 
   const handleSeeAllClick = (title, gamesList) => {
+    triggerHaptic(30); // Light tap
     setSeeAllTitle(title); setSeeAllBaseGames(gamesList);
     setSelectedPrices([]); setSelectedGenres([]); setSelectedPlatforms([]);
     setCurrentView('seeAll'); window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const checkAuthAndNavigate = async (view) => {
+    triggerHaptic(30);
     const { data: { session } } = await supabase.auth.getSession();
     if (session) { setCurrentView(view); window.scrollTo({ top: 0, behavior: 'smooth' }); } 
     else setShowAuth(true);
@@ -289,6 +298,7 @@ export default function Home() {
   });
 
   const toggleFilter = (type, value) => {
+    triggerHaptic(20); // Very light tap for filters
     if (type === 'price') setSelectedPrices(prev => prev.includes(value) ? [] : [value]);
     if (type === 'genre') setSelectedGenres(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]);
     if (type === 'platform') setSelectedPlatforms(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]);
@@ -310,22 +320,22 @@ export default function Home() {
         {showAuth && <Auth onClose={() => setShowAuth(false)} />}
         
         <main className="w-full">
-          {currentView === 'profile' && <Profile onBack={() => setCurrentView('store')} />}
-          {currentView === 'cart' && <Cart onBack={() => setCurrentView('store')} onCheckout={() => setCurrentView('checkout')} promotedGamesIds={promotedGamesIds} />}
-          {currentView === 'wishlist' && <Wishlist onBack={() => setCurrentView('store')} onGameClick={handleGameClick} promotedGamesIds={promotedGamesIds} />}
-          {currentView === 'orders' && <MyOrders onBack={() => setCurrentView('store')} />}
-          {currentView === 'checkout' && <div className="animate-in slide-in-from-right duration-300 bg-white dark:bg-[#121212] min-h-screen pt-4"><button onClick={() => setCurrentView('cart')} className="mx-4 mb-2 text-sm font-bold text-blue-600 dark:text-blue-400 hover:underline">← Back to Cart</button><Checkout promotedGamesIds={promotedGamesIds} /></div>}
-          {currentView === 'details' && selectedGame && <ProductDetail game={selectedGame} allGames={[...games, ...giftCards]} onBack={() => setCurrentView('store')} onBuyNow={() => checkAuthAndNavigate('checkout')} onGameClick={handleGameClick} promoPrice={promotedGamesIds[selectedGame.id]} />}
+          {currentView === 'profile' && <Profile onBack={() => { triggerHaptic(30); setCurrentView('store'); }} />}
+          {currentView === 'cart' && <Cart onBack={() => { triggerHaptic(30); setCurrentView('store'); }} onCheckout={() => { triggerHaptic(30); setCurrentView('checkout'); }} promotedGamesIds={promotedGamesIds} />}
+          {currentView === 'wishlist' && <Wishlist onBack={() => { triggerHaptic(30); setCurrentView('store'); }} onGameClick={handleGameClick} promotedGamesIds={promotedGamesIds} />}
+          {currentView === 'orders' && <MyOrders onBack={() => { triggerHaptic(30); setCurrentView('store'); }} />}
+          {currentView === 'checkout' && <div className="animate-in slide-in-from-right duration-300 bg-white dark:bg-[#121212] min-h-screen pt-4"><button onClick={() => { triggerHaptic(30); setCurrentView('cart'); }} className="mx-4 mb-2 text-sm font-bold text-blue-600 dark:text-blue-400 hover:underline">← Back to Cart</button><Checkout promotedGamesIds={promotedGamesIds} /></div>}
+          {currentView === 'details' && selectedGame && <ProductDetail game={selectedGame} allGames={[...games, ...giftCards]} onBack={() => { triggerHaptic(30); setCurrentView('store'); }} onBuyNow={() => checkAuthAndNavigate('checkout')} onGameClick={handleGameClick} promoPrice={promotedGamesIds[selectedGame.id]} />}
           
           {/* --- SEE ALL GRID --- */}
           {currentView === 'seeAll' && (
             <div className="animate-in slide-in-from-right duration-300 min-h-screen bg-gray-50 dark:bg-[#0a0a0a]">
               <div className="sticky top-0 z-40 flex items-center justify-between bg-white dark:bg-[#121212] px-4 py-4 shadow-sm dark:border-b dark:border-gray-800">
                 <div className="flex items-center">
-                  <button onClick={() => setCurrentView('store')} className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"><ArrowLeft className="h-6 w-6 text-gray-800 dark:text-gray-200" /></button>
+                  <button onClick={() => { triggerHaptic(30); setCurrentView('store'); }} className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"><ArrowLeft className="h-6 w-6 text-gray-800 dark:text-gray-200" /></button>
                   <h1 className="ml-2 text-xl font-black text-gray-900 dark:text-white truncate max-w-[200px]">{seeAllTitle}</h1>
                 </div>
-                <button onClick={() => setIsFilterOpen(true)} className="relative p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                <button onClick={() => { triggerHaptic(30); setIsFilterOpen(true); }} className="relative p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
                   <Filter className="h-5 w-5 text-gray-800 dark:text-gray-200" />
                   {activeFilterCount > 0 && <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-black dark:bg-white text-[9px] font-bold text-white dark:text-black border border-white dark:border-[#121212]">{activeFilterCount}</span>}
                 </button>
@@ -361,7 +371,7 @@ export default function Home() {
                 <div className="fixed inset-0 z-[200] flex flex-col bg-gray-50 dark:bg-[#0a0a0a] text-gray-900 dark:text-white animate-in slide-in-from-bottom duration-300">
                   <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#121212]">
                     <h2 className="text-lg font-bold">Sort and Filter</h2>
-                    <button onClick={() => setIsFilterOpen(false)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"><X className="h-6 w-6 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white" /></button>
+                    <button onClick={() => { triggerHaptic(30); setIsFilterOpen(false); }} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"><X className="h-6 w-6 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white" /></button>
                   </div>
                   <div className="flex-1 overflow-y-auto p-4 pb-32">
                     <div className="mb-6 bg-white dark:bg-[#121212] p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
@@ -398,8 +408,8 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="fixed bottom-0 left-0 right-0 p-4 bg-white dark:bg-[#121212] border-t border-gray-100 dark:border-gray-800 flex items-center gap-4 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-50">
-                    <button onClick={() => { setSelectedPrices([]); setSelectedGenres([]); setSelectedPlatforms([]); }} className="flex-1 py-4 text-sm font-bold text-gray-500 hover:text-black dark:hover:text-white transition-colors">Clear all</button>
-                    <button onClick={() => setIsFilterOpen(false)} className="flex-[2] py-4 rounded-xl bg-black dark:bg-white text-white dark:text-black text-sm font-bold shadow-lg shadow-gray-500/30 active:scale-95 transition-all">Show {filteredSeeAllGames.length} results</button>
+                    <button onClick={() => { triggerHaptic(30); setSelectedPrices([]); setSelectedGenres([]); setSelectedPlatforms([]); }} className="flex-1 py-4 text-sm font-bold text-gray-500 hover:text-black dark:hover:text-white transition-colors">Clear all</button>
+                    <button onClick={() => { triggerHaptic([50, 50, 50]); setIsFilterOpen(false); }} className="flex-[2] py-4 rounded-xl bg-black dark:bg-white text-white dark:text-black text-sm font-bold shadow-lg shadow-gray-500/30 active:scale-95 transition-all">Show {filteredSeeAllGames.length} results</button>
                   </div>
                 </div>
               )}
@@ -510,7 +520,7 @@ export default function Home() {
                           {lang === 'mm' ? 'အကြံပြုထားသည်' : lang === 'zh' ? '推荐' : 'Recommended'}
                         </h2>
                         {dynamicRecs.length > 3 && (
-                          <button onClick={() => setRecPage(p => p === 0 ? 1 : 0)} className="bg-gray-100 dark:bg-gray-800 p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                          <button onClick={() => { triggerHaptic(20); setRecPage(p => p === 0 ? 1 : 0); }} className="bg-gray-100 dark:bg-gray-800 p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
                             <ChevronRight className={`w-3 h-3 text-black dark:text-white transition-transform duration-300 ${recPage === 1 ? 'rotate-180' : ''}`} />
                           </button>
                         )}

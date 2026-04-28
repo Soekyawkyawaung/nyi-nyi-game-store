@@ -12,6 +12,13 @@ const Cart = ({ onBack, onCheckout }) => {
   const [totalPrice, setTotalPrice] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
+  // --- HAPTIC FEEDBACK HELPER ---
+  const triggerHaptic = (pattern = 50) => {
+    if (typeof window !== 'undefined' && navigator.vibrate) {
+      try { navigator.vibrate(pattern); } catch (e) {}
+    }
+  };
+
   useEffect(() => {
     fetchCart();
   }, []);
@@ -62,14 +69,23 @@ const Cart = ({ onBack, onCheckout }) => {
       const updatedCart = cartItems.filter(item => item.id !== id);
       setCartItems(updatedCart);
       calculateTotal(updatedCart);
+      triggerHaptic([100, 50, 100]); // Heavy double tap for delete
       toast.success(lang === 'mm' ? "ဖယ်ရှားပြီးပါပြီ" : lang === 'zh' ? "已移除" : "Item removed");
       window.dispatchEvent(new Event('cartUpdated')); 
-    } catch (error) { toast.error("Error"); }
+    } catch (error) { 
+      triggerHaptic(200); 
+      toast.error("Error"); 
+    }
   };
 
   const handleUpdateQuantity = async (id, currentQty, change) => {
     const newQty = currentQty + change;
-    if (newQty < 1) return; 
+    if (newQty < 1) {
+      triggerHaptic(200); // Error buzz if trying to go below 1
+      return; 
+    }
+
+    triggerHaptic(30); // Light tap for quantity change
 
     const updatedCart = cartItems.map(item => item.id === id ? { ...item, quantity: newQty } : item);
     setCartItems(updatedCart);
@@ -86,7 +102,7 @@ const Cart = ({ onBack, onCheckout }) => {
     return (
       <div className="flex min-h-screen flex-col bg-gray-50 dark:bg-[#0a0a0a] transition-colors">
         <div className="sticky top-0 z-50 flex items-center bg-white dark:bg-[#121212] px-4 py-4 shadow-sm border-b border-gray-100 dark:border-gray-800">
-          <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"><ArrowLeft className="h-6 w-6 text-gray-800 dark:text-gray-200" /></button>
+          <button onClick={() => { triggerHaptic(30); onBack(); }} className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"><ArrowLeft className="h-6 w-6 text-gray-800 dark:text-gray-200" /></button>
           <h1 className="ml-2 text-lg font-black text-gray-900 dark:text-white">
             {lang === 'mm' ? 'သင်၏ စျေးခြင်းတောင်း' : lang === 'zh' ? '您的购物车' : 'Your Cart'}
           </h1>
@@ -99,7 +115,7 @@ const Cart = ({ onBack, onCheckout }) => {
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-[#0a0a0a] animate-in slide-in-from-right duration-300 pb-28 transition-colors">
       <div className="sticky top-0 z-50 flex items-center bg-white dark:bg-[#121212] px-4 py-4 shadow-sm border-b border-gray-100 dark:border-gray-800">
-        <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition-all"><ArrowLeft className="h-6 w-6 text-gray-800 dark:text-gray-200" /></button>
+        <button onClick={() => { triggerHaptic(30); onBack(); }} className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition-all"><ArrowLeft className="h-6 w-6 text-gray-800 dark:text-gray-200" /></button>
         <h1 className="ml-2 text-lg font-black text-gray-900 dark:text-white">
           {lang === 'mm' ? 'သင်၏ စျေးခြင်းတောင်း' : lang === 'zh' ? '您的购物车' : 'Your Cart'}
         </h1>
@@ -114,7 +130,7 @@ const Cart = ({ onBack, onCheckout }) => {
           <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-8">
             Looks like you haven't added any games or gift cards yet.
           </p>
-          <button onClick={onBack} className="rounded-xl bg-[#e31818] px-8 py-3.5 font-bold text-white shadow-lg active:scale-95 transition-all hover:bg-red-700">
+          <button onClick={() => { triggerHaptic(30); onBack(); }} className="rounded-xl bg-[#e31818] px-8 py-3.5 font-bold text-white shadow-lg active:scale-95 transition-all hover:bg-red-700">
             {lang === 'mm' ? 'စျေးဆက်ဝယ်မည်' : lang === 'zh' ? '继续购物' : 'Continue Shopping'}
           </button>
         </div>
@@ -164,7 +180,7 @@ const Cart = ({ onBack, onCheckout }) => {
             <span className="text-sm font-bold text-gray-500 dark:text-gray-400">Total Total</span>
             <span className="text-2xl font-black text-[#e31818]">{totalPrice.toLocaleString()} MMK</span>
           </div>
-          <button onClick={onCheckout} className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#e31818] py-4 font-bold text-white shadow-lg shadow-red-500/30 hover:bg-red-700 active:scale-95 transition-all">
+          <button onClick={() => { triggerHaptic([50, 50, 50]); onCheckout(); }} className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#e31818] py-4 font-bold text-white shadow-lg shadow-red-500/30 hover:bg-red-700 active:scale-95 transition-all">
             <CreditCard className="h-5 w-5" /> 
             {lang === 'mm' ? 'ငွေပေးချေရန်' : lang === 'zh' ? '去结账' : 'PROCEED TO CHECKOUT'}
           </button>

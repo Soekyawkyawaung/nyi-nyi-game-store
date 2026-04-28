@@ -19,6 +19,13 @@ const Checkout = () => {
   const [isSuccess, setIsSuccess] = useState(false);
   const [generatedOrderNo, setGeneratedOrderNo] = useState('');
 
+  // --- HAPTIC FEEDBACK HELPER ---
+  const triggerHaptic = (pattern = 50) => {
+    if (typeof window !== 'undefined' && navigator.vibrate) {
+      try { navigator.vibrate(pattern); } catch (e) {}
+    }
+  };
+
   useEffect(() => {
     fetchCartData();
   }, []);
@@ -56,6 +63,7 @@ const Checkout = () => {
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
+      triggerHaptic(30); // Light tap on file select
       setScreenshotFile(e.target.files[0]);
       setScreenshotPreview(URL.createObjectURL(e.target.files[0]));
     }
@@ -63,10 +71,12 @@ const Checkout = () => {
 
   const handleConfirmPayment = async () => {
     if (!screenshotFile) {
+      triggerHaptic(200); // Error buzz
       toast.error(lang === 'mm' ? "ငွေလွှဲပြေစာ ထည့်ပါ" : lang === 'zh' ? "请上传付款截图" : "Please upload your payment screenshot first!");
       return;
     }
 
+    triggerHaptic(50); // Tap to indicate processing started
     setIsSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -109,8 +119,10 @@ const Checkout = () => {
       await supabase.from('cart').delete().eq('user_id', session.user.id);
       window.dispatchEvent(new Event('cartUpdated'));
 
+      triggerHaptic([100, 50, 100, 50, 100]); // Long celebratory vibration sequence
       setIsSuccess(true);
     } catch (error) {
+      triggerHaptic(200); 
       toast.error(error.message || "Failed to submit payment.");
     } finally {
       setIsSubmitting(false);
@@ -185,7 +197,10 @@ const Checkout = () => {
         </div>
         
         <div className="p-4">
-          <label className="flex items-center justify-between p-4 rounded-xl border-2 border-green-500 bg-green-50/30 dark:bg-green-900/20 shadow-sm cursor-default">
+          <label 
+            onClick={() => { triggerHaptic(30); setPaymentMethod('kbzpay'); }}
+            className="flex items-center justify-between p-4 rounded-xl border-2 border-green-500 bg-green-50/30 dark:bg-green-900/20 shadow-sm cursor-pointer"
+          >
             <div className="flex items-center gap-4">
               <div className="w-14 h-10 flex items-center justify-center bg-white rounded-lg shadow-sm border border-gray-100 p-1.5"><img src="/kbz_logo.png" alt="KBZPay Logo" className="max-h-full max-w-full object-contain" /></div>
               <div><p className="font-bold text-gray-900 dark:text-white text-base">KBZPay</p><p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mt-0.5">0% commission rate</p></div>
@@ -202,7 +217,7 @@ const Checkout = () => {
           <p className="text-sm font-medium leading-relaxed">မိမိထံ ငွေပေးချေရန် KBZPay QR Scanner ကို အသုံးပြုပါ။</p>
         </div>
         <div className="flex flex-col items-center bg-[#005fb8] pb-8 pt-2">
-          <div className="w-72 overflow-hidden rounded-xl bg-white p-2 shadow-2xl sm:w-80">
+          <div className="w-72 overflow-hidden rounded-xl bg-white p-2 shadow-2xl sm:w-80 border-2 border-[#005fb8]">
             <img src="/kbzpay.jpg" alt="KBZPay QR Code" className="w-full h-auto object-contain" onError={(e) => { e.target.onerror = null; e.target.src = "https://via.placeholder.com/300?text=Missing+QR+Image"; }} />
           </div>
           <h3 className="mt-5 text-lg font-bold text-white tracking-wide">Nyi Nyi Min Thant</h3>

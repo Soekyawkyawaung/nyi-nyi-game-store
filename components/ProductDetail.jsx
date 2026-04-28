@@ -25,6 +25,13 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
 
+  // --- HAPTIC FEEDBACK HELPER ---
+  const triggerHaptic = (pattern = 50) => {
+    if (typeof window !== 'undefined' && navigator.vibrate) {
+      try { navigator.vibrate(pattern); } catch (e) {}
+    }
+  };
+
   const productImages = React.useMemo(() => {
     const images = [];
     if (game.cover_image || game.image) images.push(game.cover_image || game.image);
@@ -60,25 +67,36 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
   const handleToggleWishlist = async () => {
     if (isGiftCard) return; 
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return toast.error(lang === 'mm' ? "ကျေးဇူးပြု၍ အကောင့်ဝင်ပါ" : lang === 'zh' ? "请先登录" : "Please sign in");
+    if (!session) {
+      triggerHaptic(200); // Error buzz
+      return toast.error(lang === 'mm' ? "ကျေးဇူးပြု၍ အကောင့်ဝင်ပါ" : lang === 'zh' ? "请先登录" : "Please sign in");
+    }
 
     setIsWishlistLoading(true);
     try {
       if (isWishlisted) {
         await supabase.from('wishlist').delete().eq('user_id', session.user.id).eq('game_id', game.id);
         setIsWishlisted(false);
+        triggerHaptic([100, 50, 100]); // Remove buzz
         toast.success(lang === 'mm' ? "ဖယ်ရှားပြီးပါပြီ" : lang === 'zh' ? "已移除" : "Removed");
       } else {
         await supabase.from('wishlist').insert([{ user_id: session.user.id, game_id: game.id }]);
         setIsWishlisted(true);
+        triggerHaptic([50, 50, 50]); // Success double tap
         toast.success(lang === 'mm' ? "သိမ်းဆည်းပြီးပါပြီ" : lang === 'zh' ? "已保存" : "Saved!");
       }
-    } catch (error) { toast.error("Error"); } finally { setIsWishlistLoading(false); }
+    } catch (error) { 
+      triggerHaptic(200); 
+      toast.error("Error"); 
+    } finally { setIsWishlistLoading(false); }
   };
 
   const handleAddToCart = async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return toast.error(lang === 'mm' ? "ကျေးဇူးပြု၍ အကောင့်ဝင်ပါ" : lang === 'zh' ? "请先登录" : "Please sign in");
+    if (!session) {
+      triggerHaptic(200);
+      return toast.error(lang === 'mm' ? "ကျေးဇူးပြု၍ အကောင့်ဝင်ပါ" : lang === 'zh' ? "请先登录" : "Please sign in");
+    }
 
     setIsAddingCart(true);
     try {
@@ -98,18 +116,21 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
       
       if (existingCart) {
         await supabase.from('cart').update({ quantity: existingCart.quantity + (isGiftCard ? quantity : 1) }).eq('id', existingCart.id);
+        triggerHaptic([50, 50, 50]);
         toast.success("Updated!");
       } else {
         const { error } = await supabase.from('cart').insert([cartData]);
         if (error) throw error;
+        triggerHaptic([50, 50, 50]);
         toast.success("Added!");
       }
       window.dispatchEvent(new Event('cartUpdated'));
-    } catch (error) { toast.error("Error"); } finally { setIsAddingCart(false); }
+    } catch (error) { triggerHaptic(200); toast.error("Error"); } finally { setIsAddingCart(false); }
   };
 
   const handleBuyNow = async () => {
     await handleAddToCart();
+    triggerHaptic([50, 50, 50]);
     onBuyNow();
   };
 
@@ -134,7 +155,7 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
     <div className="flex flex-col min-h-screen bg-white dark:bg-[#121212] pb-32 animate-in fade-in duration-300 transition-colors">
       
       <div className="sticky top-0 z-40 flex items-center justify-between bg-white dark:bg-[#121212] px-4 py-4 shadow-sm border-b border-gray-100 dark:border-gray-800 transition-colors">
-        <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95"><ArrowLeft className="h-6 w-6 text-gray-800 dark:text-gray-200" /></button>
+        <button onClick={() => { triggerHaptic(30); onBack(); }} className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95"><ArrowLeft className="h-6 w-6 text-gray-800 dark:text-gray-200" /></button>
         <h1 className="text-sm font-black text-gray-900 dark:text-white truncate px-4 uppercase">{game.name}</h1>
         {!isGiftCard ? (
           <button onClick={handleToggleWishlist} disabled={isWishlistLoading} className="p-2 -mr-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95">
@@ -147,6 +168,7 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
         className={`w-full aspect-square bg-gray-50 dark:bg-[#0a0a0a] flex items-center justify-center relative overflow-hidden cursor-pointer ${isGiftCard ? 'p-12' : ''}`}
         onClick={() => {
            if (productImages.length > 0) {
+             triggerHaptic(30);
              setActiveGalleryIndex(0);
              setIsGalleryOpen(true);
            }
@@ -169,7 +191,6 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
 
         <h2 className="text-xl font-black text-gray-900 dark:text-white mb-1">{game.name}</h2>
         
-        {/* --- NEW RELEASE DATE SECTION --- */}
         {!isGiftCard && game.release_date ? (
           <div className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 mb-6">
             <Calendar className="w-4 h-4" />
@@ -193,7 +214,7 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
               {game.options?.map((opt, idx) => (
                 <button 
                   key={idx}
-                  onClick={() => setSelectedOption(opt)}
+                  onClick={() => { triggerHaptic(40); setSelectedOption(opt); }}
                   className={`py-4 px-3 rounded-2xl border-2 text-center transition-all ${selectedOption?.label === opt.label ? 'border-[#e31818] bg-[#e31818] text-white shadow-lg' : 'border-gray-100 dark:border-gray-800 bg-white dark:bg-[#121212] text-gray-600 dark:text-gray-400'}`}
                 >
                   <p className="text-[10px] font-bold opacity-70 mb-1">{opt.label}</p>
@@ -204,9 +225,9 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
 
             <div className="flex justify-center">
               <div className="flex items-center gap-6 bg-gray-50 dark:bg-[#0a0a0a] rounded-full px-5 py-2.5 border border-gray-200 dark:border-gray-800 shadow-inner">
-                <button onClick={() => setQuantity(q => Math.max(1, q - 1))} className="w-9 h-9 flex items-center justify-center rounded-full bg-white dark:bg-[#121212] text-gray-600 dark:text-gray-300 hover:text-[#e31818] hover:bg-red-50 dark:hover:bg-red-900/20 shadow border border-gray-200 dark:border-gray-700 font-bold text-2xl transition-colors active:scale-95">-</button>
+                <button onClick={() => { triggerHaptic(30); setQuantity(q => Math.max(1, q - 1)); }} className="w-9 h-9 flex items-center justify-center rounded-full bg-white dark:bg-[#121212] text-gray-600 dark:text-gray-300 hover:text-[#e31818] hover:bg-red-50 dark:hover:bg-red-900/20 shadow border border-gray-200 dark:border-gray-700 font-bold text-2xl transition-colors active:scale-95">-</button>
                 <span className="font-black text-xl w-6 text-center text-gray-900 dark:text-white">{quantity}</span>
-                <button onClick={() => setQuantity(q => q + 1)} className="w-9 h-9 flex items-center justify-center rounded-full bg-[#e31818] text-white shadow-md font-bold text-2xl transition-transform active:scale-95">+</button>
+                <button onClick={() => { triggerHaptic(30); setQuantity(q => q + 1); }} className="w-9 h-9 flex items-center justify-center rounded-full bg-[#e31818] text-white shadow-md font-bold text-2xl transition-transform active:scale-95">+</button>
               </div>
             </div>
           </div>
@@ -240,6 +261,7 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
                         <button 
                             key={index} 
                             onClick={() => {
+                                triggerHaptic(30);
                                 setActiveGalleryIndex(index);
                                 setIsGalleryOpen(true);
                             }}
@@ -259,7 +281,7 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
               {lang === 'mm' ? 'တရားဝင် နမူနာ' : lang === 'zh' ? '官方预告片' : 'Official Trailer'}
             </h3>
             {!isPlayingTrailer && youtubeId ? (
-              <button onClick={() => setIsPlayingTrailer(true)} className="w-full flex items-center justify-center gap-2 bg-red-50 dark:bg-red-900/20 text-[#e31818] py-3 rounded-xl font-bold hover:bg-red-100 dark:hover:bg-red-900/40 active:scale-95 transition-all">
+              <button onClick={() => { triggerHaptic(30); setIsPlayingTrailer(true); }} className="w-full flex items-center justify-center gap-2 bg-red-50 dark:bg-red-900/20 text-[#e31818] py-3 rounded-xl font-bold hover:bg-red-100 dark:hover:bg-red-900/40 active:scale-95 transition-all">
                 <PlayCircle className="h-5 w-5" /> Watch Trailer
               </button>
             ) : isPlayingTrailer && youtubeId ? (
@@ -278,7 +300,7 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
             {shouldTruncate && !isExpanded ? `${game.description.substring(0, DESCRIPTION_LIMIT)}...` : game.description}
           </p>
           {shouldTruncate && (
-            <button onClick={() => setIsExpanded(!isExpanded)} className="mt-2 flex items-center gap-1 text-xs font-black text-blue-600 dark:text-blue-400 active:scale-95 transition-transform">
+            <button onClick={() => { triggerHaptic(30); setIsExpanded(!isExpanded); }} className="mt-2 flex items-center gap-1 text-xs font-black text-blue-600 dark:text-blue-400 active:scale-95 transition-transform">
               {isExpanded ? <>SHOW LESS <ChevronUp className="h-4 w-4" /></> : <>READ MORE <ChevronDown className="h-4 w-4" /></>}
             </button>
           )}
@@ -295,7 +317,7 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
           </div>
           <div className="flex overflow-x-auto px-4 pb-4 gap-4 snap-x hide-scrollbar">
             {recommendedGames.map(rGame => (
-              <div key={rGame.id} onClick={() => onGameClick(rGame)} className="min-w-[130px] max-w-[130px] snap-start flex flex-col gap-2 cursor-pointer active:scale-95 transition-transform">
+              <div key={rGame.id} onClick={() => { triggerHaptic(30); onGameClick(rGame); }} className="min-w-[130px] max-w-[130px] snap-start flex flex-col gap-2 cursor-pointer active:scale-95 transition-transform">
                 <div className="aspect-square w-full rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 shadow-sm border border-gray-100 dark:border-gray-800">
                   <img src={rGame.cover_image} alt={rGame.name} className="h-full w-full object-cover" />
                 </div>
@@ -335,7 +357,7 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
             <div className="text-sm font-bold text-white tracking-widest px-3 py-1 bg-black/60 backdrop-blur-md rounded-lg pointer-events-auto shadow-sm">
               {activeGalleryIndex + 1} <span className="text-gray-400 mx-1">/</span> {productImages.length}
             </div>
-            <button onClick={() => setIsGalleryOpen(false)} className="p-2 bg-black/60 backdrop-blur-md rounded-full hover:bg-white/20 transition-colors pointer-events-auto shadow-sm">
+            <button onClick={() => { triggerHaptic(30); setIsGalleryOpen(false); }} className="p-2 bg-black/60 backdrop-blur-md rounded-full hover:bg-white/20 transition-colors pointer-events-auto shadow-sm">
               <X className="w-6 h-6 text-white" />
             </button>
           </div>
@@ -346,7 +368,7 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
             <p className="text-center text-white/70 text-[10px] font-bold mb-3 uppercase tracking-widest">Screenshot</p>
             <div className="flex overflow-x-auto px-4 gap-3 snap-x hide-scrollbar justify-start md:justify-center">
               {productImages.map((imgUrl, idx) => (
-                <button key={idx} onClick={() => setActiveGalleryIndex(idx)} className={`snap-center flex-shrink-0 w-24 h-16 rounded-lg overflow-hidden transition-all duration-300 ${activeGalleryIndex === idx ? 'border-2 border-white opacity-100 scale-105 shadow-lg' : 'border-2 border-transparent opacity-40 hover:opacity-100'}`}>
+                <button key={idx} onClick={() => { triggerHaptic(30); setActiveGalleryIndex(idx); }} className={`snap-center flex-shrink-0 w-24 h-16 rounded-lg overflow-hidden transition-all duration-300 ${activeGalleryIndex === idx ? 'border-2 border-white opacity-100 scale-105 shadow-lg' : 'border-2 border-transparent opacity-40 hover:opacity-100'}`}>
                   <img src={imgUrl} className="w-full h-full object-cover" alt={`Thumb ${idx}`} />
                 </button>
               ))}

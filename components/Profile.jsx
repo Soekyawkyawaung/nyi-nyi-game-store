@@ -3,9 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { Camera, Lock, User as UserIcon, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useLanguage } from './LanguageContext';
 import toast from 'react-hot-toast';
 
 const Profile = ({ onBack }) => {
+  const { t, lang } = useLanguage();
   const [user, setUser] = useState(null);
   const [name, setName] = useState('');
   const [oldPassword, setOldPassword] = useState('');
@@ -51,12 +53,11 @@ const Profile = ({ onBack }) => {
 
       setAvatarUrl(publicUrl);
       
-      // Update metadata
       await supabase.auth.updateUser({
         data: { avatar_url: publicUrl }
       });
 
-      toast.success("Photo updated!");
+      toast.success(lang === 'mm' ? "ဓာတ်ပုံ ပြောင်းလဲပြီးပါပြီ" : lang === 'zh' ? "照片已更新" : "Photo updated!");
     } catch (error) {
       toast.error(error.message);
     } finally {
@@ -75,8 +76,7 @@ const Profile = ({ onBack }) => {
     setIsUpdating(false);
     if (error) toast.error(error.message);
     else {
-      toast.success("Details saved!");
-      // This forces the local session to refresh so the Header sees the change
+      toast.success(lang === 'mm' ? "အချက်အလက်များ သိမ်းဆည်းပြီးပါပြီ" : lang === 'zh' ? "详细信息已保存" : "Details saved!");
       await supabase.auth.refreshSession();
     }
   };
@@ -89,7 +89,7 @@ const Profile = ({ onBack }) => {
       password: oldPassword,
     });
     if (signInError) {
-      toast.error("Current password incorrect!");
+      toast.error(lang === 'mm' ? "လက်ရှိစကားဝှက် မှားယွင်းနေပါသည်" : lang === 'zh' ? "当前密码不正确" : "Current password incorrect!");
       setIsUpdating(false);
       return;
     }
@@ -97,35 +97,37 @@ const Profile = ({ onBack }) => {
     setIsUpdating(false);
     if (updateError) toast.error(updateError.message);
     else {
-      toast.success("Password updated!");
+      toast.success(lang === 'mm' ? "စကားဝှက် ပြောင်းလဲပြီးပါပြီ" : lang === 'zh' ? "密码已更新" : "Password updated!");
       setOldPassword('');
       setNewPassword('');
     }
   };
 
   if (loading) return (
-    <div className="flex h-[60vh] w-full flex-col items-center justify-center bg-white">
-      <Loader2 className="h-10 w-10 animate-spin text-red-600" />
+    <div className="flex h-[60vh] w-full flex-col items-center justify-center bg-white dark:bg-[#121212] transition-colors">
+      <Loader2 className="h-10 w-10 animate-spin text-[#e31818]" />
     </div>
   );
 
   return (
-    <div className="flex min-h-screen w-full flex-col items-center bg-white px-4 py-6">
-      <button onClick={onBack} className="mb-6 self-start text-sm font-bold text-blue-600">← Back to Store</button>
+    <div className="flex min-h-screen w-full flex-col items-center bg-white dark:bg-[#121212] px-4 py-6 transition-colors duration-300">
+      <button onClick={onBack} className="mb-6 self-start text-sm font-bold text-blue-600 dark:text-blue-400 hover:underline">
+        ← {lang === 'mm' ? 'စတိုးသို့ ပြန်သွားရန်' : lang === 'zh' ? '返回商店' : 'Back to Store'}
+      </button>
 
-      <div className="mb-6 w-full rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-        <h2 className="mb-1 text-xl font-bold text-gray-900">My Profile</h2>
-        <p className="mb-6 text-xs font-semibold text-gray-400">{user?.email}</p>
+      <div className="mb-6 w-full rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-[#121212] p-6 shadow-sm transition-colors">
+        <h2 className="mb-1 text-xl font-bold text-gray-900 dark:text-white">{t('profile')}</h2>
+        <p className="mb-6 text-xs font-semibold text-gray-400 dark:text-gray-500">{user?.email}</p>
         
         <div className="mb-6 flex justify-center">
-          <label className="relative flex h-28 w-28 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-gray-200 bg-gray-50 hover:bg-gray-100">
+          <label className="relative flex h-28 w-28 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#0a0a0a] hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors">
             {avatarUrl ? (
               <img src={avatarUrl} alt="Profile" className="h-full w-full object-cover" />
             ) : (
-              <Camera className="h-10 w-10 text-gray-400" />
+              <Camera className="h-10 w-10 text-gray-400 dark:text-gray-500" />
             )}
             {isUpdating && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+              <div className="absolute inset-0 flex items-center justify-center bg-black/20 dark:bg-black/50">
                 <Loader2 className="h-6 w-6 animate-spin text-white" />
               </div>
             )}
@@ -134,33 +136,38 @@ const Profile = ({ onBack }) => {
         </div>
 
         <form onSubmit={handleUpdateProfile} className="flex flex-col gap-4">
-          <div className="flex items-center rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-            <UserIcon className="h-5 w-5 text-gray-500" />
-            {/* Added text-gray-900 to ensure the name is visible */}
+          <div className="flex items-center rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#0a0a0a] px-4 py-3 transition-colors">
+            <UserIcon className="h-5 w-5 text-gray-500 dark:text-gray-400" />
             <input 
               type="text" 
               value={name} 
               onChange={(e) => setName(e.target.value)} 
               required 
-              placeholder="Full Name" 
-              className="ml-3 w-full bg-transparent text-sm font-bold text-gray-900 placeholder-gray-500 outline-none" 
+              placeholder={lang === 'mm' ? 'အမည်အပြည့်အစုံ' : lang === 'zh' ? '全名' : 'Full Name'}
+              className="ml-3 w-full bg-transparent text-sm font-bold text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 outline-none" 
             />
           </div>
-          <button type="submit" disabled={isUpdating} className="w-full rounded-xl bg-black py-3.5 font-bold text-white active:scale-95 disabled:opacity-50">
-            {isUpdating ? 'Saving...' : 'Save Details'}
+          <button type="submit" disabled={isUpdating} className="w-full rounded-xl bg-[#e31818] py-3.5 font-bold text-white hover:bg-red-700 transition-colors active:scale-95 disabled:opacity-50">
+            {isUpdating 
+              ? (lang === 'mm' ? 'သိမ်းဆည်းနေသည်...' : lang === 'zh' ? '保存中...' : 'Saving...') 
+              : (lang === 'mm' ? 'အချက်အလက်များ သိမ်းဆည်းမည်' : lang === 'zh' ? '保存详细信息' : 'Save Details')}
           </button>
         </form>
       </div>
 
-      <div className="w-full rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-        <h2 className="mb-6 text-xl font-bold text-gray-900">Security</h2>
+      <div className="w-full rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-[#121212] p-6 shadow-sm transition-colors">
+        <h2 className="mb-6 text-xl font-bold text-gray-900 dark:text-white">
+          {lang === 'mm' ? 'လုံခြုံရေး' : lang === 'zh' ? '安全' : 'Security'}
+        </h2>
         <form onSubmit={handleChangePassword} className="flex flex-col gap-4">
-          <input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} required placeholder="Current Password" 
-            className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-900 placeholder-gray-500 outline-none" />
-          <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required placeholder="New Password" 
-            className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-900 placeholder-gray-500 outline-none" />
-          <button type="submit" disabled={isUpdating} className="w-full rounded-xl bg-[#e31818] py-3.5 font-bold text-white active:scale-95">
-            Update Password
+          <input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} required 
+            placeholder={lang === 'mm' ? 'လက်ရှိစကားဝှက်' : lang === 'zh' ? '当前密码' : 'Current Password'}
+            className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#0a0a0a] px-4 py-3 text-sm font-bold text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 outline-none focus:border-[#e31818] transition-colors" />
+          <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required 
+            placeholder={lang === 'mm' ? 'စကားဝှက်အသစ်' : lang === 'zh' ? '新密码' : 'New Password'}
+            className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#0a0a0a] px-4 py-3 text-sm font-bold text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 outline-none focus:border-[#e31818] transition-colors" />
+          <button type="submit" disabled={isUpdating} className="w-full rounded-xl bg-black dark:bg-white py-3.5 font-bold text-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors active:scale-95">
+            {lang === 'mm' ? 'စကားဝှက် ပြောင်းလဲမည်' : lang === 'zh' ? '更新密码' : 'Update Password'}
           </button>
         </form>
       </div>

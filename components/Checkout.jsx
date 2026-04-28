@@ -3,9 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { UploadCloud, Loader2, CheckCircle, Receipt, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useLanguage } from './LanguageContext';
 import toast from 'react-hot-toast';
 
 const Checkout = () => {
+  const { lang } = useLanguage();
   const [cartItems, setCartItems] = useState([]);
   const [totalPrice, setTotalPrice] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -61,7 +63,7 @@ const Checkout = () => {
 
   const handleConfirmPayment = async () => {
     if (!screenshotFile) {
-      toast.error("Please upload your payment screenshot first!");
+      toast.error(lang === 'mm' ? "ငွေလွှဲပြေစာ ထည့်ပါ" : lang === 'zh' ? "请上传付款截图" : "Please upload your payment screenshot first!");
       return;
     }
 
@@ -121,27 +123,27 @@ const Checkout = () => {
 
   if (isSuccess) {
     return (
-      <div className="flex min-h-[70vh] flex-col items-center justify-center px-6 text-center animate-in zoom-in duration-500">
-        <div className="rounded-full bg-green-100 p-4 mb-6"><CheckCircle className="h-16 w-16 text-green-600" /></div>
-        <h2 className="text-2xl font-black text-gray-900">Order Placed!</h2>
-        <p className="mt-2 text-lg font-bold text-blue-600">Order No: {generatedOrderNo}</p>
-        <p className="mt-3 text-sm text-gray-500 leading-relaxed">
+      <div className="flex min-h-[70vh] flex-col items-center justify-center px-6 text-center animate-in zoom-in duration-500 bg-white dark:bg-[#121212] transition-colors">
+        <div className="rounded-full bg-green-100 dark:bg-green-900/30 p-4 mb-6"><CheckCircle className="h-16 w-16 text-green-600 dark:text-green-500" /></div>
+        <h2 className="text-2xl font-black text-gray-900 dark:text-white">Order Placed!</h2>
+        <p className="mt-2 text-lg font-bold text-blue-600 dark:text-blue-400">Order No: {generatedOrderNo}</p>
+        <p className="mt-3 text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
           We are checking your payment. You can track your status in the "My Orders" menu.
         </p>
       </div>
     );
   }
 
-  if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-[#e31818]" /></div>;
+  if (isLoading) return <div className="flex justify-center py-20 bg-white dark:bg-[#121212]"><Loader2 className="h-8 w-8 animate-spin text-[#e31818]" /></div>;
 
   return (
-    <div className="flex flex-col px-4 pb-20 pt-2 animate-in fade-in duration-300">
+    <div className="flex flex-col px-4 pb-20 pt-2 animate-in fade-in duration-300 bg-white dark:bg-[#121212] min-h-screen transition-colors">
       
       {/* Order Summary */}
-      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-        <h2 className="mb-4 flex items-center gap-3 text-lg font-bold text-gray-900 border-b border-gray-100 pb-3">
+      <div className="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-[#121212] p-5 shadow-sm">
+        <h2 className="mb-4 flex items-center gap-3 text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-800 pb-3">
           <img src="/order-summary.png" alt="Order Summary" className="h-6 w-6 object-contain" />
-          Order Summary
+          {lang === 'mm' ? 'အော်ဒါ အကျဉ်းချုပ်' : lang === 'zh' ? '订单摘要' : 'Order Summary'}
         </h2>
         <div className="flex flex-col gap-4">
           {cartItems.map((item) => {
@@ -158,33 +160,35 @@ const Checkout = () => {
             const totalItemPrice = Number(itemPrice) * itemQty;
 
             return (
-              <div key={item.id} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-100 gap-2">
+              <div key={item.id} className="flex justify-between items-center bg-gray-50 dark:bg-[#0a0a0a] p-3 rounded-lg border border-gray-100 dark:border-gray-800 gap-2">
                 <div className="flex flex-col truncate flex-1 pr-1">
-                  <span className="text-sm font-bold text-gray-900 truncate leading-tight">{itemQty}x {targetItem?.name}</span>
-                  {isGift && <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1">{item.selected_option?.label}</span>}
+                  <span className="text-sm font-bold text-gray-900 dark:text-white truncate leading-tight">{itemQty}x {targetItem?.name}</span>
+                  {isGift && <span className="text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest mt-1">{item.selected_option?.label}</span>}
                 </div>
-                <span className="text-sm font-black text-black whitespace-nowrap">{totalItemPrice.toLocaleString()} MMK</span>
+                <span className="text-sm font-black text-black dark:text-white whitespace-nowrap">{totalItemPrice.toLocaleString()} MMK</span>
               </div>
             );
           })}
         </div>
-        <div className="mt-4 flex justify-between border-t border-dashed border-gray-200 pt-4">
-          <span className="font-bold text-gray-900">Total</span>
+        <div className="mt-4 flex justify-between border-t border-dashed border-gray-200 dark:border-gray-800 pt-4">
+          <span className="font-bold text-gray-900 dark:text-white">Total</span>
           <span className="text-lg font-black text-[#e31818]">{totalPrice.toLocaleString()} MMK</span>
         </div>
       </div>
 
       {/* Payment Method Selection */}
-      <div className="mt-6 rounded-2xl shadow-sm border border-gray-100 bg-white overflow-hidden">
-        <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-          <h2 className="text-base font-bold text-gray-900">Payment Method</h2>
+      <div className="mt-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 bg-white dark:bg-[#121212] overflow-hidden">
+        <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-[#0a0a0a]">
+          <h2 className="text-base font-bold text-gray-900 dark:text-white">
+            {lang === 'mm' ? 'ငွေပေးချေမည့် နည်းလမ်း' : lang === 'zh' ? '付款方式' : 'Payment Method'}
+          </h2>
         </div>
         
         <div className="p-4">
-          <label className="flex items-center justify-between p-4 rounded-xl border-2 border-green-500 bg-green-50/30 shadow-sm cursor-default">
+          <label className="flex items-center justify-between p-4 rounded-xl border-2 border-green-500 bg-green-50/30 dark:bg-green-900/20 shadow-sm cursor-default">
             <div className="flex items-center gap-4">
               <div className="w-14 h-10 flex items-center justify-center bg-white rounded-lg shadow-sm border border-gray-100 p-1.5"><img src="/kbz_logo.png" alt="KBZPay Logo" className="max-h-full max-w-full object-contain" /></div>
-              <div><p className="font-bold text-gray-900 text-base">KBZPay</p><p className="text-xs font-semibold text-gray-500 mt-0.5">0% commission rate</p></div>
+              <div><p className="font-bold text-gray-900 dark:text-white text-base">KBZPay</p><p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mt-0.5">0% commission rate</p></div>
             </div>
             <div className="w-6 h-6 rounded-full flex items-center justify-center border bg-green-500 border-green-500">
               <Check className="w-4 h-4 text-white" />
@@ -193,20 +197,30 @@ const Checkout = () => {
         </div>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-2xl shadow-sm border border-gray-100 bg-white">
-        <div className="bg-[#005fb8] p-4 text-center text-white"><p className="text-sm font-medium leading-relaxed">မိမိထံ ငွေပေးချေရန် KBZPay QR Scanner ကို အသုံးပြုပါ။</p></div>
+      <div className="mt-6 overflow-hidden rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 bg-white dark:bg-[#121212]">
+        <div className="bg-[#005fb8] p-4 text-center text-white border-b border-[#005fb8]">
+          <p className="text-sm font-medium leading-relaxed">မိမိထံ ငွေပေးချေရန် KBZPay QR Scanner ကို အသုံးပြုပါ။</p>
+        </div>
         <div className="flex flex-col items-center bg-[#005fb8] pb-8 pt-2">
           <div className="w-72 overflow-hidden rounded-xl bg-white p-2 shadow-2xl sm:w-80">
             <img src="/kbzpay.jpg" alt="KBZPay QR Code" className="w-full h-auto object-contain" onError={(e) => { e.target.onerror = null; e.target.src = "https://via.placeholder.com/300?text=Missing+QR+Image"; }} />
           </div>
           <h3 className="mt-5 text-lg font-bold text-white tracking-wide">Nyi Nyi Min Thant</h3>
         </div>
-        <div className="p-6 text-center bg-white">
-          <p className="mb-4 text-sm font-semibold text-gray-500 leading-relaxed px-4">
-            After transferring the exact amount via <span className="font-bold text-black">KBZPay</span>, please upload a screenshot of your successful transaction.
+        
+        <div className="p-6 text-center bg-white dark:bg-[#121212]">
+          <p className="mb-4 text-sm font-semibold text-gray-500 dark:text-gray-400 leading-relaxed px-4">
+            After transferring the exact amount via <span className="font-bold text-black dark:text-white">KBZPay</span>, please upload a screenshot of your successful transaction.
           </p>
-          <label className="relative flex w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-8 hover:bg-gray-100 transition-colors">
-            {screenshotPreview ? <img src={screenshotPreview} alt="Receipt Preview" className="h-32 object-contain shadow-sm rounded-md" /> : <div className="flex flex-col items-center"><UploadCloud className="mb-2 h-8 w-8 text-gray-400" /><span className="text-sm font-bold text-gray-500">Tap to Select Screenshot</span></div>}
+          <label className="relative flex w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#0a0a0a] px-4 py-8 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors">
+            {screenshotPreview ? (
+              <img src={screenshotPreview} alt="Receipt Preview" className="h-32 object-contain shadow-sm rounded-md" />
+            ) : (
+              <div className="flex flex-col items-center">
+                <UploadCloud className="mb-2 h-8 w-8 text-gray-400 dark:text-gray-500" />
+                <span className="text-sm font-bold text-gray-500 dark:text-gray-400">Tap to Select Screenshot</span>
+              </div>
+            )}
             <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
           </label>
         </div>
@@ -214,7 +228,13 @@ const Checkout = () => {
 
       <button onClick={handleConfirmPayment} disabled={isSubmitting || cartItems.length === 0} className="mt-6 w-full rounded-xl bg-[#e31818] py-4 font-bold text-white shadow-lg shadow-red-500/30 hover:bg-red-700 active:scale-95 transition-all disabled:opacity-50 flex justify-center items-center gap-2">
         {isSubmitting && <Loader2 className="h-5 w-5 animate-spin" />}
-        {isSubmitting ? 'Processing Payment...' : (hasPreOrder ? 'Proceed to Pre-Order' : 'Confirm Payment')}
+        {isSubmitting 
+          ? 'Processing...' 
+          : (hasPreOrder 
+              ? (lang === 'mm' ? 'ကြိုတင်မှာယူမည်' : lang === 'zh' ? '预购' : 'Proceed to Pre-Order') 
+              : (lang === 'mm' ? 'ငွေပေးချေမှု အတည်ပြုမည်' : lang === 'zh' ? '确认付款' : 'Confirm Payment')
+            )
+        }
       </button>
     </div>
   );

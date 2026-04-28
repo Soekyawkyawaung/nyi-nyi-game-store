@@ -66,7 +66,7 @@ const CountdownTimer = ({ endTime, textColor = 'text-white' }) => {
 };
 
 export default function Home() {
-  const { t } = useLanguage(); 
+  const { t, lang } = useLanguage(); 
   const [currentView, setCurrentView] = useState('store'); 
   const [showAuth, setShowAuth] = useState(false); 
   
@@ -252,11 +252,15 @@ export default function Home() {
   const SeeAllCard = ({ title, categoryArray }) => (
     <div onClick={() => handleSeeAllClick(title, categoryArray)} className="min-w-[140px] max-w-[140px] snap-start flex flex-col justify-start cursor-pointer active:scale-95 transition-transform group">
       <div className="aspect-square w-full rounded-xl bg-gray-900 dark:bg-gray-800 flex flex-col items-center justify-center text-white shadow-sm border border-gray-800 hover:bg-black dark:hover:bg-gray-900 transition-colors">
-        <span className="text-sm font-bold tracking-widest">See All</span>
+        <span className="text-sm font-bold tracking-widest text-center px-2">
+          {lang === 'mm' ? 'အားလုံးကြည့်မည်' : lang === 'zh' ? '查看全部' : 'SEE ALL'}
+        </span>
         <ChevronRight className="w-6 h-6 mt-1" />
       </div>
     </div>
   );
+
+  const seeAllText = lang === 'mm' ? 'အားလုံးကြည့်မည် >' : lang === 'zh' ? '查看全部 >' : 'See all >';
 
   const filteredSeeAllGames = seeAllBaseGames.filter(item => {
     const isGift = !!item.options;
@@ -457,10 +461,12 @@ export default function Home() {
                   
                   {/* NEW GAMES */}
                   <div className="px-4 flex justify-between items-end mb-4">
-                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">New games for you</h2>
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                      {lang === 'mm' ? 'ဂိမ်းအသစ်များ' : lang === 'zh' ? '新游戏' : 'New games for you'}
+                    </h2>
                     {newGames.length > 10 && (
                       <button onClick={() => handleSeeAllClick('New games for you', newGames)} className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline">
-                        See all &gt;
+                        {seeAllText}
                       </button>
                     )}
                   </div>
@@ -500,7 +506,9 @@ export default function Home() {
                   <div className="px-4 mt-6 mb-8 grid grid-cols-2 gap-3">
                     <div className="bg-white dark:bg-[#121212] rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-100 dark:border-gray-800 p-3 flex flex-col relative overflow-hidden">
                       <div className="flex items-center justify-between mb-3">
-                        <h2 className="text-sm font-black text-gray-900 dark:text-white italic tracking-tight">Recommended</h2>
+                        <h2 className="text-sm font-black text-gray-900 dark:text-white italic tracking-tight">
+                          {lang === 'mm' ? 'အကြံပြုထားသည်' : lang === 'zh' ? '推荐' : 'Recommended'}
+                        </h2>
                         {dynamicRecs.length > 3 && (
                           <button onClick={() => setRecPage(p => p === 0 ? 1 : 0)} className="bg-gray-100 dark:bg-gray-800 p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
                             <ChevronRight className={`w-3 h-3 text-black dark:text-white transition-transform duration-300 ${recPage === 1 ? 'rotate-180' : ''}`} />
@@ -535,7 +543,9 @@ export default function Home() {
                     </div>
 
                     <div className="bg-white dark:bg-[#121212] rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-100 dark:border-gray-800 p-3 flex flex-col">
-                      <h2 className="text-sm font-black text-gray-900 dark:text-white mb-3 italic tracking-tight">History</h2>
+                      <h2 className="text-sm font-black text-gray-900 dark:text-white mb-3 italic tracking-tight">
+                        {lang === 'mm' ? 'ကြည့်ရှုခဲ့သည်များ' : lang === 'zh' ? '历史记录' : 'History'}
+                      </h2>
                       {recentlyViewed.length > 0 ? (
                         <div className="grid grid-cols-2 gap-2 flex-1">
                           {recentlyViewed.slice(0, 4).map(item => { 
@@ -560,10 +570,12 @@ export default function Home() {
 
                   {/* PRE-ORDERS */}
                   <div className="px-4 flex justify-between items-end mb-4 mt-8">
-                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">Pre-Orders</h2>
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                      {lang === 'mm' ? 'ကြိုတင်မှာယူမှုများ' : lang === 'zh' ? '预购' : 'Pre-Orders'}
+                    </h2>
                     {preOrderGames.length > 10 && (
                       <button onClick={() => handleSeeAllClick('Pre-Orders', preOrderGames)} className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline">
-                        See all &gt;
+                        {seeAllText}
                       </button>
                     )}
                   </div>
@@ -604,11 +616,12 @@ export default function Home() {
                     <div className="mt-8 mb-8 animate-in fade-in duration-700">
                       <div className="px-4 flex justify-between items-end mb-4">
                         <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                          <CreditCard className="w-5 h-5 text-gray-400"/> Wallet Top-Up
+                          <CreditCard className="w-5 h-5 text-gray-400"/> 
+                          {lang === 'mm' ? 'ငွေဖြည့်ကတ်များ' : lang === 'zh' ? '钱包充值' : 'Wallet Top-Up'}
                         </h2>
                         {giftCards.length > 5 && (
                           <button onClick={() => handleSeeAllClick('Wallet Top-Up', giftCards)} className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline">
-                            See all &gt;
+                            {seeAllText}
                           </button>
                         )}
                       </div>
@@ -632,7 +645,9 @@ export default function Home() {
                         {giftCards.length > 5 && (
                           <div onClick={() => handleSeeAllClick('Wallet Top-Up', giftCards)} className="min-w-[100px] snap-start flex items-center justify-center cursor-pointer group active:scale-95 transition-transform">
                             <div className="h-[106px] w-full px-6 rounded-2xl bg-gray-900 dark:bg-gray-800 flex flex-col items-center justify-center text-white shadow-sm border border-gray-800 hover:bg-black dark:hover:bg-gray-900 transition-colors">
-                              <span className="text-xs font-bold tracking-widest mb-1 text-center whitespace-nowrap">SEE ALL</span>
+                              <span className="text-xs font-bold tracking-widest mb-1 text-center whitespace-nowrap">
+                                {lang === 'mm' ? 'အားလုံးကြည့်မည်' : lang === 'zh' ? '查看全部' : 'SEE ALL'}
+                              </span>
                               <ChevronRight className="w-5 h-5" />
                             </div>
                           </div>
@@ -643,10 +658,12 @@ export default function Home() {
 
                   {/* TRENDING PS5 GAMES */}
                   <div className="px-4 flex justify-between items-end mb-4">
-                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">Trending PS5 Games</h2>
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                      {lang === 'mm' ? 'ခေတ်စားနေသော PS5 ဂိမ်းများ' : lang === 'zh' ? '热门 PS5 游戏' : 'Trending PS5 Games'}
+                    </h2>
                     {ps5GamesCategory.length > 10 && (
                       <button onClick={() => handleSeeAllClick('Trending PS5 Games', ps5GamesCategory)} className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline">
-                        See all &gt;
+                        {seeAllText}
                       </button>
                     )}
                   </div>
@@ -687,7 +704,8 @@ export default function Home() {
                     <div className="mt-8 mb-8 animate-in fade-in duration-500 bg-red-50 dark:bg-red-900/10 py-6 border-y border-red-100 dark:border-red-900/20">
                       <div className="px-4 mb-4">
                         <h2 className="text-lg font-black text-[#e31818] flex items-center gap-2 tracking-tighter italic">
-                          <Tag className="w-5 h-5" /> SPECIAL OFFERS
+                          <Tag className="w-5 h-5" /> 
+                          {lang === 'mm' ? 'အထူးပရိုမိုးရှင်းများ' : lang === 'zh' ? '特价优惠' : 'SPECIAL OFFERS'}
                         </h2>
                       </div>
                       
@@ -721,7 +739,9 @@ export default function Home() {
                               >
                                 <div className="flex flex-col flex-1 overflow-hidden">
                                   <h3 className="text-xl font-black text-white italic tracking-tighter leading-tight truncate">{promoGroup.promo_text}</h3>
-                                  <p className="text-xs font-bold text-white/70 mt-1 uppercase tracking-widest">Tap to see games on sale</p>
+                                  <p className="text-xs font-bold text-white/70 mt-1 uppercase tracking-widest">
+                                    {lang === 'mm' ? 'လျှော့ဈေးဂိမ်းများကိုကြည့်ရန် နှိပ်ပါ' : lang === 'zh' ? '点击查看特价游戏' : 'Tap to see games on sale'}
+                                  </p>
                                 </div>
                                 <div className="flex-shrink-0 bg-black/30 backdrop-blur-md p-4 rounded-2xl flex items-center gap-3 border border-white/10 shadow-inner">
                                   <Timer className="w-6 h-6 text-red-400"/>
@@ -742,7 +762,7 @@ export default function Home() {
                         <h2 className="text-lg font-bold text-gray-900 dark:text-white">PS4 Games</h2>
                         {ps4GamesCategory.length > 10 && (
                           <button onClick={() => handleSeeAllClick('PS4 Games', ps4GamesCategory)} className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline">
-                            See all &gt;
+                            {seeAllText}
                           </button>
                         )}
                       </div>

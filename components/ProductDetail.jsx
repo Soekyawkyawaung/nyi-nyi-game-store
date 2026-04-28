@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, ShoppingCart, Heart, ChevronDown, ChevronUp, PlayCircle, Image as ImageIcon, X, Tag } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, Heart, ChevronDown, ChevronUp, PlayCircle, Image as ImageIcon, X, Tag, Calendar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { useLanguage } from './LanguageContext'; // IMPORT TRANSLATIONS
+import { useLanguage } from './LanguageContext'; 
 import toast from 'react-hot-toast';
 
 const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNow, onGameClick }) => {
-  const { lang } = useLanguage(); // GET CURRENT LANGUAGE
+  const { lang } = useLanguage(); 
   const [isAddingCart, setIsAddingCart] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [isWishlistLoading, setIsWishlistLoading] = useState(false);
@@ -40,7 +40,7 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
     setIsPlayingTrailer(false);
     setQuantity(1); 
     setIsGalleryOpen(false);
-    setActiveGalleryIndex(0);
+    setActiveGalleryIndex(0); 
 
     if (isGiftCard && game.options && game.options.length > 0) {
       setSelectedOption(prefilledOption || game.options[0]);
@@ -167,7 +167,22 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
           </div>
         )}
 
-        <h2 className="text-xl font-black text-gray-900 dark:text-white mb-6">{game.name}</h2>
+        <h2 className="text-xl font-black text-gray-900 dark:text-white mb-1">{game.name}</h2>
+        
+        {/* --- NEW RELEASE DATE SECTION --- */}
+        {!isGiftCard && game.release_date ? (
+          <div className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 mb-6">
+            <Calendar className="w-4 h-4" />
+            <span>
+              {lang === 'mm' ? 'ထွက်ရှိမည့်ရက်: ' : lang === 'zh' ? '发布日期: ' : 'Release Date: '}
+              <span className="text-gray-700 dark:text-gray-300">
+                {new Date(game.release_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+              </span>
+            </span>
+          </div>
+        ) : (
+          <div className="mb-6"></div>
+        )}
         
         {isGiftCard ? (
           <div className="flex flex-col mb-8 border-b border-gray-100 dark:border-gray-800 pb-8">

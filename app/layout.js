@@ -18,6 +18,9 @@ export const metadata = {
   description: "Best game store in Myanmar",
   // This prevents users from accidentally zooming and breaking the layout
   viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0",
+  icons: {
+    icon: "/logo.jpg", 
+  },
 };
 
 export default function RootLayout({ children }) {

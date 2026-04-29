@@ -108,6 +108,7 @@ export default function Home() {
       ]);
       
       const gamesData = gamesResult.data || [];
+      const giftsData = giftsResult.data || [];
       const promosData = promosResult.data || [];
 
       const promoMap = {};
@@ -140,10 +141,29 @@ export default function Home() {
       }
 
       setGames(gamesData);
-      setGiftCards(giftsResult.data || []);
+      setGiftCards(giftsData);
       setIsLoading(false);
+
+      // --- NEW: CATCH SHARED LINKS SAFELY ---
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const sharedGameId = urlParams.get('game');
+        
+        if (sharedGameId) {
+          const foundGame = gamesData.find(g => g.id.toString() === sharedGameId) 
+                         || giftsData.find(g => g.id.toString() === sharedGameId);
+          
+          if (foundGame) {
+            setSelectedGame(foundGame);
+            setCurrentView('details');
+            window.history.replaceState(null, '', window.location.pathname);
+          }
+        }
+      }
     };
+    
     fetchStoreData();
+
     const savedRecent = JSON.parse(localStorage.getItem('nyinyi_history') || '[]');
     setRecentlyViewed(savedRecent);
   }, []);
@@ -169,7 +189,7 @@ export default function Home() {
   const visibleRecs = dynamicRecs.slice(recPage * 3, recPage * 3 + 3);
 
   const handleGameClick = (item) => {
-    triggerHaptic(30); // Light tap when clicking a game
+    triggerHaptic(30); 
     let recent = [...recentlyViewed].filter(g => g.id !== item.id); 
     recent.unshift(item); 
     recent = recent.slice(0, 5); 
@@ -182,7 +202,7 @@ export default function Home() {
   };
 
   const handleSeeAllClick = (title, gamesList) => {
-    triggerHaptic(30); // Light tap
+    triggerHaptic(30); 
     setSeeAllTitle(title); setSeeAllBaseGames(gamesList);
     setSelectedPrices([]); setSelectedGenres([]); setSelectedPlatforms([]);
     setCurrentView('seeAll'); window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -298,7 +318,7 @@ export default function Home() {
   });
 
   const toggleFilter = (type, value) => {
-    triggerHaptic(20); // Very light tap for filters
+    triggerHaptic(20); 
     if (type === 'price') setSelectedPrices(prev => prev.includes(value) ? [] : [value]);
     if (type === 'genre') setSelectedGenres(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]);
     if (type === 'platform') setSelectedPlatforms(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]);

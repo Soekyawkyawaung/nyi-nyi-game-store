@@ -12,7 +12,6 @@ const Cart = ({ onBack, onCheckout }) => {
   const [totalPrice, setTotalPrice] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-  // --- HAPTIC FEEDBACK HELPER ---
   const triggerHaptic = (pattern = 50) => {
     if (typeof window !== 'undefined' && navigator.vibrate) {
       try { navigator.vibrate(pattern); } catch (e) {}
@@ -30,7 +29,7 @@ const Cart = ({ onBack, onCheckout }) => {
       if (session?.user) {
         const { data, error } = await supabase
           .from('cart')
-          .select('id, selected_option, quantity, games(*), gift_cards(*)')
+          .select('id, selected_option, account_type, quantity, games(*), gift_cards(*)')
           .eq('user_id', session.user.id)
           .order('id', { ascending: true }); 
 
@@ -52,7 +51,8 @@ const Cart = ({ onBack, onCheckout }) => {
       if (isGift && item.selected_option) {
         priceToUse = Number(item.selected_option.price);
       } else if (item.games) {
-        priceToUse = item.games.discount_price || item.games.price;
+        if (item.account_type === 'PS4 Edition') priceToUse = item.games.ps4_discount_price || item.games.ps4_price;
+        else priceToUse = item.games.discount_price || item.games.price;
       }
       
       return sum + (Number(priceToUse) * (item.quantity || 1));
@@ -69,7 +69,7 @@ const Cart = ({ onBack, onCheckout }) => {
       const updatedCart = cartItems.filter(item => item.id !== id);
       setCartItems(updatedCart);
       calculateTotal(updatedCart);
-      triggerHaptic([100, 50, 100]); // Heavy double tap for delete
+      triggerHaptic([100, 50, 100]); 
       toast.success(lang === 'mm' ? "ဖယ်ရှားပြီးပါပြီ" : lang === 'zh' ? "已移除" : "Item removed");
       window.dispatchEvent(new Event('cartUpdated')); 
     } catch (error) { 
@@ -81,11 +81,11 @@ const Cart = ({ onBack, onCheckout }) => {
   const handleUpdateQuantity = async (id, currentQty, change) => {
     const newQty = currentQty + change;
     if (newQty < 1) {
-      triggerHaptic(200); // Error buzz if trying to go below 1
+      triggerHaptic(200); 
       return; 
     }
 
-    triggerHaptic(30); // Light tap for quantity change
+    triggerHaptic(30); 
 
     const updatedCart = cartItems.map(item => item.id === id ? { ...item, quantity: newQty } : item);
     setCartItems(updatedCart);
@@ -143,7 +143,12 @@ const Cart = ({ onBack, onCheckout }) => {
               const itemQty = item.quantity || 1;
               if (!targetItem) return null; 
 
-              const priceToUse = isGift ? (item.selected_option?.price || 0) : (targetItem.discount_price || targetItem.price);
+              let priceToUse = 0;
+              if (isGift) priceToUse = item.selected_option?.price || 0;
+              else {
+                if (item.account_type === 'PS4 Edition') priceToUse = targetItem.ps4_discount_price || targetItem.ps4_price;
+                else priceToUse = targetItem.discount_price || targetItem.price;
+              }
 
               return (
                 <div key={item.id} className="flex overflow-hidden rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-[#121212] shadow-sm p-3 gap-3">
@@ -154,7 +159,9 @@ const Cart = ({ onBack, onCheckout }) => {
                   <div className="flex flex-1 flex-col justify-between py-1">
                     <div className="flex justify-between items-start">
                       <div className="pr-2">
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white leading-tight">{targetItem.name}</h3>
+                        <h3 className="text-sm font-bold text-gray-900 dark:text-white leading-tight">
+                          {targetItem.name} {item.account_type && item.account_type !== 'Standard Edition' && !isGift ? `(${item.account_type})` : ''}
+                        </h3>
                         {isGift && <p className="text-[10px] font-black text-[#e31818] uppercase tracking-widest mt-1 mb-2">{item.selected_option?.label}</p>}
                         
                         <div className={`flex items-center gap-3 bg-gray-50 dark:bg-[#0a0a0a] rounded-full px-2 py-1 border border-gray-200 dark:border-gray-800 w-fit ${!isGift ? 'mt-2' : ''}`}>

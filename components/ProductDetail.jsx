@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, ShoppingCart, Heart, ChevronDown, ChevronUp, PlayCircle, Image as ImageIcon, X, Tag, Calendar, Share2 } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, Heart, ChevronDown, ChevronUp, PlayCircle, Image as ImageIcon, X, Tag, Calendar, Share2, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from './LanguageContext'; 
 import toast from 'react-hot-toast';
@@ -14,6 +14,7 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
   
   const isGiftCard = !!game.options;
 
+  const [accountType, setAccountType] = useState('');
   const [selectedOption, setSelectedOption] = useState(null);
   const [quantity, setQuantity] = useState(1); 
 
@@ -24,6 +25,10 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
 
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
+
+  // --- MODAL STATES FOR SELECTION ---
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null); 
 
   // --- HAPTIC FEEDBACK HELPER ---
   const triggerHaptic = (pattern = 50) => {
@@ -41,6 +46,19 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
     return images;
   }, [game]);
 
+  // --- DYNAMIC EDITIONS (PS4 vs PS5) ---
+  const availableEditions = React.useMemo(() => {
+    if (isGiftCard) return [];
+    const editions = [];
+    if (game.ps4_price) {
+      editions.push({ id: 'PS5 Edition', label: 'PlayStation 5 Edition', price: game.price, discount: game.discount_price });
+      editions.push({ id: 'PS4 Edition', label: 'PlayStation 4 Edition', price: game.ps4_price, discount: game.ps4_discount_price });
+    } else {
+      editions.push({ id: 'Standard Edition', label: 'Standard Edition', price: game.price, discount: game.discount_price });
+    }
+    return editions;
+  }, [game, isGiftCard]);
+
   useEffect(() => {
     checkWishlistStatus();
     setIsExpanded(false); 
@@ -48,13 +66,21 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
     setQuantity(1); 
     setIsGalleryOpen(false);
     setActiveGalleryIndex(0); 
+    setIsModalOpen(false);
+    setPendingAction(null);
 
     if (isGiftCard && game.options && game.options.length > 0) {
       setSelectedOption(prefilledOption || game.options[0]);
     } else {
       setSelectedOption(null);
     }
-  }, [game.id, prefilledOption]);
+
+    if (!isGiftCard && availableEditions.length === 1) {
+      setAccountType(availableEditions[0].id);
+    } else {
+      setAccountType('');
+    }
+  }, [game.id, prefilledOption, availableEditions]);
 
   const checkWishlistStatus = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -87,10 +113,11 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
       }
     } catch (error) { 
       triggerHaptic(200); 
-      toast.error("Error"); 
+      toast.error(error.message || "Failed to update wishlist"); 
     } finally { setIsWishlistLoading(false); }
   };
 
+  // --- SMART CART LOGIC ---
   const handleAddToCart = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
@@ -103,13 +130,14 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
       const cartData = {
         user_id: session.user.id,
         game_id: !isGiftCard ? game.id : null,
+        account_type: !isGiftCard ? accountType : null,
         gift_card_id: isGiftCard ? game.id : null,
         selected_option: isGiftCard ? selectedOption : null,
         quantity: isGiftCard ? quantity : 1 
       };
 
       let existingQuery = supabase.from('cart').select('id, quantity').eq('user_id', session.user.id);
-      if (!isGiftCard) existingQuery = existingQuery.eq('game_id', game.id);
+      if (!isGiftCard) existingQuery = existingQuery.eq('game_id', game.id).eq('account_type', accountType);
       else existingQuery = existingQuery.eq('gift_card_id', game.id).eq('selected_option->>label', selectedOption.label);
       
       const { data: existingCart } = await existingQuery.maybeSingle();
@@ -125,16 +153,47 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
         toast.success("Added!");
       }
       window.dispatchEvent(new Event('cartUpdated'));
-    } catch (error) { triggerHaptic(200); toast.error("Error"); } finally { setIsAddingCart(false); }
+    } catch (error) { 
+      triggerHaptic(200); 
+      console.error(error);
+      toast.error(error.message || "Failed to add to cart"); 
+    } finally { setIsAddingCart(false); }
   };
 
+  // --- ISOLATED BUY NOW LOGIC (Bypasses Cart DB) ---
   const handleBuyNow = async () => {
-    await handleAddToCart();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      triggerHaptic(200);
+      return toast.error(lang === 'mm' ? "ကျေးဇူးပြု၍ အကောင့်ဝင်ပါ" : lang === 'zh' ? "请先登录" : "Please sign in");
+    }
+
+    const buyNowData = [{
+      id: 'buynow_temp',
+      quantity: isGiftCard ? quantity : 1,
+      selected_option: isGiftCard ? selectedOption : null,
+      account_type: !isGiftCard ? accountType : null,
+      games: !isGiftCard ? game : null,
+      gift_cards: isGiftCard ? game : null,
+    }];
+
+    localStorage.setItem('nyinyi_buynow', JSON.stringify(buyNowData));
     triggerHaptic([50, 50, 50]);
     onBuyNow();
   };
 
-  // --- NEW: SHARE FUNCTION ---
+  const onCartClick = () => {
+    if (isGiftCard && !selectedOption) { setPendingAction('cart'); setIsModalOpen(true); return; }
+    if (!isGiftCard && availableEditions.length > 1 && !accountType) { setPendingAction('cart'); setIsModalOpen(true); return; }
+    handleAddToCart();
+  };
+
+  const onBuyClick = () => {
+    if (isGiftCard && !selectedOption) { setPendingAction('buy'); setIsModalOpen(true); return; }
+    if (!isGiftCard && availableEditions.length > 1 && !accountType) { setPendingAction('buy'); setIsModalOpen(true); return; }
+    handleBuyNow();
+  };
+
   const handleShare = async () => {
     triggerHaptic(30);
     const shareUrl = `${window.location.origin}/?game=${game.id}`;
@@ -145,15 +204,12 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
     };
 
     try {
-      if (navigator.share) {
-        await navigator.share(shareData);
-      } else {
+      if (navigator.share) await navigator.share(shareData);
+      else {
         await navigator.clipboard.writeText(shareUrl);
         toast.success(lang === 'mm' ? "လင့်ခ်ကို ကူးယူပြီးပါပြီ" : lang === 'zh' ? "链接已复制" : "Link copied to clipboard!");
       }
-    } catch (err) {
-      console.error("Error sharing:", err);
-    }
+    } catch (err) { console.error("Error sharing:", err); }
   };
 
   const getYouTubeId = (url) => {
@@ -167,9 +223,13 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
   const isPreOrder = game.collections?.some(c => c.toLowerCase().includes('pre-order') || c.toLowerCase().includes('preorder'));
   const recommendedGames = allGames.filter(g => g.id !== game.id && !g.options).slice(0, 6);
 
+  const displayEdition = availableEditions.find(e => e.id === accountType);
   const currentBasePrice = isGiftCard 
     ? (selectedOption ? Number(selectedOption.price) : 0)
-    : (game.discount_price || game.price);
+    : (displayEdition ? (displayEdition.discount || displayEdition.price) : (game.discount_price || game.price));
+  
+  const currentOriginalPrice = isGiftCard ? null : (displayEdition ? displayEdition.price : game.price);
+  const isDiscounted = !isGiftCard && (displayEdition ? displayEdition.discount : game.discount_price);
   
   const totalPrice = currentBasePrice * (isGiftCard ? quantity : 1);
 
@@ -180,7 +240,6 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
         <button onClick={() => { triggerHaptic(30); onBack(); }} className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95"><ArrowLeft className="h-6 w-6 text-gray-800 dark:text-gray-200" /></button>
         <h1 className="text-sm font-black text-gray-900 dark:text-white truncate px-4 uppercase">{game.name}</h1>
         
-        {/* SHARE AND WISHLIST BUTTONS */}
         <div className="flex items-center gap-1 -mr-2">
           <button onClick={handleShare} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95">
             <Share2 className="h-5 w-5 text-gray-800 dark:text-gray-200" />
@@ -203,15 +262,10 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
            }
         }}
       >
-        <img 
-            src={game.cover_image || game.image} 
-            alt={game.name} 
-            className={isGiftCard ? "w-full h-full object-contain drop-shadow-xl" : "w-full h-full object-cover"} 
-        />
+        <img src={game.cover_image || game.image} alt={game.name} className={isGiftCard ? "w-full h-full object-contain drop-shadow-xl" : "w-full h-full object-cover"} />
       </div>
 
       <div className="p-5">
-        
         {isPreOrder && (
           <div className="mb-3 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 px-3 py-1.5 rounded-lg text-xs font-black inline-flex items-center gap-2 border border-orange-200 dark:border-orange-900/50">
             <Tag className="w-3 h-3" /> {lang === 'mm' ? 'ကြိုတင်မှာယူရန်' : lang === 'zh' ? '预购' : 'PRE-ORDER'}
@@ -234,42 +288,53 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
           <div className="mb-6"></div>
         )}
         
-        {isGiftCard ? (
-          <div className="flex flex-col mb-8 border-b border-gray-100 dark:border-gray-800 pb-8">
+        {/* --- NATIVE APP STYLE EDITION SELECTOR --- */}
+        {(!isGiftCard && availableEditions.length > 1) || isGiftCard ? (
+          <div className="mb-8 border-b border-gray-100 dark:border-gray-800 pb-8">
             <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-3">
-              {lang === 'mm' ? 'အမျိုးအစားရွေးချယ်ပါ' : lang === 'zh' ? '选择面额' : 'Select Denomination'}
+              {isGiftCard ? (lang === 'mm' ? 'အမျိုးအစားရွေးချယ်ပါ' : lang === 'zh' ? '选择面额' : 'Select Denomination') : (lang === 'mm' ? 'ဗားရှင်းရွေးချယ်ပါ' : lang === 'zh' ? '选择版本' : 'Select Edition')}
             </h3>
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              {game.options?.map((opt, idx) => (
-                <button 
-                  key={idx}
-                  onClick={() => { triggerHaptic(40); setSelectedOption(opt); }}
-                  className={`py-4 px-3 rounded-2xl border-2 text-center transition-all ${selectedOption?.label === opt.label ? 'border-[#e31818] bg-[#e31818] text-white shadow-lg' : 'border-gray-100 dark:border-gray-800 bg-white dark:bg-[#121212] text-gray-600 dark:text-gray-400'}`}
-                >
-                  <p className="text-[10px] font-bold opacity-70 mb-1">{opt.label}</p>
-                  <p className="text-sm font-black">{Number(opt.price).toLocaleString()} MMK</p>
-                </button>
-              ))}
-            </div>
-
-            <div className="flex justify-center">
-              <div className="flex items-center gap-6 bg-gray-50 dark:bg-[#0a0a0a] rounded-full px-5 py-2.5 border border-gray-200 dark:border-gray-800 shadow-inner">
-                <button onClick={() => { triggerHaptic(30); setQuantity(q => Math.max(1, q - 1)); }} className="w-9 h-9 flex items-center justify-center rounded-full bg-white dark:bg-[#121212] text-gray-600 dark:text-gray-300 hover:text-[#e31818] hover:bg-red-50 dark:hover:bg-red-900/20 shadow border border-gray-200 dark:border-gray-700 font-bold text-2xl transition-colors active:scale-95">-</button>
-                <span className="font-black text-xl w-6 text-center text-gray-900 dark:text-white">{quantity}</span>
-                <button onClick={() => { triggerHaptic(30); setQuantity(q => q + 1); }} className="w-9 h-9 flex items-center justify-center rounded-full bg-[#e31818] text-white shadow-md font-bold text-2xl transition-transform active:scale-95">+</button>
+            
+            {isGiftCard ? (
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                {game.options?.map((opt, idx) => (
+                  <button key={idx} onClick={() => { triggerHaptic(40); setSelectedOption(opt); }} className={`py-4 px-3 rounded-2xl border-2 text-center transition-all ${selectedOption?.label === opt.label ? 'border-[#e31818] bg-[#e31818] text-white shadow-lg' : 'border-gray-100 dark:border-gray-800 bg-white dark:bg-[#121212] text-gray-600 dark:text-gray-400'}`}>
+                    <p className="text-[10px] font-bold opacity-70 mb-1">{opt.label}</p>
+                    <p className="text-sm font-black">{Number(opt.price).toLocaleString()} MMK</p>
+                  </button>
+                ))}
               </div>
-            </div>
+            ) : (
+              <button 
+                onClick={() => { triggerHaptic(30); setPendingAction(null); setIsModalOpen(true); }}
+                className="w-full flex items-center justify-between p-4 rounded-2xl bg-gray-50 dark:bg-[#1c1c1e] hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors active:scale-[0.98] border border-gray-200 dark:border-gray-800 shadow-sm"
+              >
+                <div className="flex flex-col items-start gap-1 text-left flex-1 pr-4">
+                  <span className="text-base font-bold text-gray-900 dark:text-white leading-tight">
+                    {displayEdition ? displayEdition.label : 'Select Console Edition'}
+                  </span>
+                  <span className="text-xs font-semibold text-[#e31818]">
+                    {displayEdition ? `${(displayEdition.discount || displayEdition.price).toLocaleString()} MMK` : 'Tap to view versions'}
+                  </span>
+                </div>
+                <ChevronRight className="w-6 h-6 text-gray-400 dark:text-gray-300 flex-shrink-0" />
+              </button>
+            )}
+
+            {isGiftCard && (
+              <div className="flex justify-center mt-6">
+                <div className="flex items-center gap-6 bg-gray-50 dark:bg-[#0a0a0a] rounded-full px-5 py-2.5 border border-gray-200 dark:border-gray-800 shadow-inner">
+                  <button onClick={() => { triggerHaptic(30); setQuantity(q => Math.max(1, q - 1)); }} className="w-9 h-9 flex items-center justify-center rounded-full bg-white dark:bg-[#121212] text-gray-600 dark:text-gray-300 hover:text-[#e31818] hover:bg-red-50 dark:hover:bg-red-900/20 shadow border border-gray-200 dark:border-gray-700 font-bold text-2xl transition-colors active:scale-95">-</button>
+                  <span className="font-black text-xl w-6 text-center text-gray-900 dark:text-white">{quantity}</span>
+                  <button onClick={() => { triggerHaptic(30); setQuantity(q => q + 1); }} className="w-9 h-9 flex items-center justify-center rounded-full bg-[#e31818] text-white shadow-md font-bold text-2xl transition-transform active:scale-95">+</button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex items-center gap-3 mb-6">
-            {game.discount_price ? (
-              <>
-                <span className="text-xl font-black text-[#e31818]">{game.discount_price.toLocaleString()} MMK</span>
-                <span className="text-sm font-bold text-gray-400 dark:text-gray-500 line-through">{game.price.toLocaleString()} MMK</span>
-              </>
-            ) : (
-              <span className="text-xl font-black text-[#e31818]">{game.price.toLocaleString()} MMK</span>
-            )}
+            <span className="text-xl font-black text-[#e31818]">{currentBasePrice.toLocaleString()} MMK</span>
+            {isDiscounted && <span className="text-sm font-bold text-gray-400 dark:text-gray-500 line-through">{currentOriginalPrice.toLocaleString()} MMK</span>}
           </div>
         )}
 
@@ -345,17 +410,20 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
             </h3>
           </div>
           <div className="flex overflow-x-auto px-4 pb-4 gap-4 snap-x hide-scrollbar">
-            {recommendedGames.map(rGame => (
-              <div key={rGame.id} onClick={() => { triggerHaptic(30); onGameClick(rGame); }} className="min-w-[130px] max-w-[130px] snap-start flex flex-col gap-2 cursor-pointer active:scale-95 transition-transform">
-                <div className="aspect-square w-full rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 shadow-sm border border-gray-100 dark:border-gray-800">
-                  <img src={rGame.cover_image} alt={rGame.name} className="h-full w-full object-cover" />
+            {recommendedGames.map(rGame => {
+               const rGamePrice = rGame.discount_price || rGame.price || rGame.ps5_discount_price || rGame.ps5_price || rGame.ps4_discount_price || rGame.ps4_price || 0;
+               return (
+                <div key={rGame.id} onClick={() => { triggerHaptic(30); onGameClick(rGame); }} className="min-w-[130px] max-w-[130px] snap-start flex flex-col gap-2 cursor-pointer active:scale-95 transition-transform">
+                  <div className="aspect-square w-full rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 shadow-sm border border-gray-100 dark:border-gray-800">
+                    <img src={rGame.cover_image} alt={rGame.name} className="h-full w-full object-cover" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-gray-900 dark:text-white truncate">{rGame.name}</h3>
+                    <p className="text-xs font-semibold text-[#e31818] mt-0.5">{(Number(rGamePrice) || 0).toLocaleString()} MMK</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-xs font-bold text-gray-900 dark:text-white truncate">{rGame.name}</h3>
-                  <p className="text-xs font-semibold text-[#e31818] mt-0.5">{rGame.discount_price || rGame.price} MMK</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -365,20 +433,93 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
           <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
             {lang === 'mm' ? 'စုစုပေါင်း' : lang === 'zh' ? '总计' : 'Total'} {isGiftCard && `(x${quantity})`}
           </span>
-          <span className="text-lg font-black text-[#e31818]">{totalPrice.toLocaleString()} MMK</span>
+          <div className="flex flex-col items-end">
+            <span className="text-lg font-black text-[#e31818]">{totalPrice.toLocaleString()} MMK</span>
+            {isDiscounted && currentOriginalPrice && (
+              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 line-through">{(currentOriginalPrice * (isGiftCard ? quantity : 1)).toLocaleString()} MMK</span>
+            )}
+          </div>
         </div>
         
         <div className="flex gap-3">
-          <button onClick={handleAddToCart} disabled={isAddingCart || (isGiftCard && !selectedOption)} className="flex items-center justify-center w-14 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-bold active:scale-95 transition-transform disabled:opacity-50 hover:bg-gray-200 dark:hover:bg-gray-700">
+          <button onClick={onCartClick} disabled={isAddingCart || (isGiftCard && !selectedOption)} className="flex items-center justify-center w-14 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-bold active:scale-95 transition-transform disabled:opacity-50 hover:bg-gray-200 dark:hover:bg-gray-700">
             <ShoppingCart className="h-5 w-5" />
           </button>
-          <button onClick={handleBuyNow} disabled={isGiftCard && !selectedOption} className="flex-1 items-center justify-center rounded-xl bg-[#e31818] text-white font-black py-3.5 shadow-lg shadow-red-500/30 active:scale-95 transition-transform hover:bg-red-700 disabled:opacity-50">
+          <button onClick={onBuyClick} disabled={isGiftCard && !selectedOption} className="flex-1 items-center justify-center rounded-xl bg-[#e31818] text-white font-black py-3.5 shadow-lg shadow-red-500/30 active:scale-95 transition-transform hover:bg-red-700 disabled:opacity-50">
             {isPreOrder 
               ? (lang === 'mm' ? 'ကြိုတင်မှာယူမည်' : lang === 'zh' ? '预购' : 'PRE-ORDER') 
               : (lang === 'mm' ? 'ယခုဝယ်မည်' : lang === 'zh' ? '立即购买' : 'BUY NOW')}
           </button>
         </div>
       </div>
+
+      {/* --- EDITION SELECTOR MODAL --- */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[100] flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="absolute inset-0" onClick={() => { triggerHaptic(30); setIsModalOpen(false); setPendingAction(null); }}></div>
+          <div className="relative bg-white dark:bg-[#121212] w-full max-w-md mx-auto rounded-t-3xl flex flex-col max-h-[85vh] animate-in slide-in-from-bottom-8 duration-300 shadow-[0_-10px_40px_rgba(0,0,0,0.3)] border-t border-gray-100 dark:border-gray-800">
+            
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800">
+              <h3 className="text-lg font-black text-gray-900 dark:text-white">Select Edition</h3>
+              <button onClick={() => { triggerHaptic(30); setIsModalOpen(false); setPendingAction(null); }} className="p-2 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+              {availableEditions.map(acc => {
+                const isSelected = accountType === acc.id;
+                const displayPrice = acc.discount || acc.price;
+                const hasDiscount = !!acc.discount;
+
+                return (
+                  <div 
+                    key={acc.id} 
+                    onClick={() => { triggerHaptic(30); setAccountType(acc.id); }}
+                    className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all cursor-pointer ${isSelected ? 'border-[#e31818] bg-red-50 dark:bg-red-900/10 shadow-sm' : 'border-gray-100 dark:border-gray-800 bg-white dark:bg-[#121212] hover:border-gray-200 dark:hover:border-gray-700'}`}
+                  >
+                    <div className="flex items-center gap-4 flex-1 pr-4">
+                      <div className="w-14 h-14 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden flex-shrink-0 border border-gray-100 dark:border-gray-800 shadow-sm">
+                        <img src={game.cover_image || game.image} alt={game.name} className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-gray-900 dark:text-white leading-tight">{acc.label}</span>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-sm font-black text-[#e31818]">{displayPrice.toLocaleString()} MMK</span>
+                          {hasDiscount && <span className="text-[10px] font-bold line-through text-gray-400 dark:text-gray-500">{acc.price.toLocaleString()}</span>}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isSelected ? 'border-[#e31818]' : 'border-gray-300 dark:border-gray-600'}`}>
+                      {isSelected && <div className="w-3 h-3 rounded-full bg-[#e31818] animate-in zoom-in duration-200"></div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            
+            <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-[#121212] rounded-b-3xl">
+               <button 
+                onClick={() => { 
+                  triggerHaptic([50, 50]); 
+                  setIsModalOpen(false); 
+                  if (pendingAction === 'cart') {
+                      handleAddToCart();
+                  } else if (pendingAction === 'buy') {
+                      handleBuyNow();
+                  }
+                  setPendingAction(null);
+                }} 
+                disabled={!accountType}
+                className="w-full py-4 rounded-xl bg-[#e31818] text-white font-bold active:scale-95 transition-transform text-sm shadow-lg disabled:opacity-50"
+               >
+                 Confirm & Continue
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isGalleryOpen && (
         <div className="fixed inset-0 z-[999] bg-[#121212] flex flex-col animate-in fade-in duration-200">
@@ -397,7 +538,7 @@ const ProductDetail = ({ game, prefilledOption = null, allGames, onBack, onBuyNo
             <p className="text-center text-white/70 text-[10px] font-bold mb-3 uppercase tracking-widest">Screenshot</p>
             <div className="flex overflow-x-auto px-4 gap-3 snap-x hide-scrollbar justify-start md:justify-center">
               {productImages.map((imgUrl, idx) => (
-                <button key={idx} onClick={() => { triggerHaptic(30); setActiveGalleryIndex(idx); }} className={`snap-center flex-shrink-0 w-24 h-16 rounded-lg overflow-hidden transition-all duration-300 ${activeGalleryIndex === idx ? 'border-2 border-white opacity-100 scale-105 shadow-lg' : 'border-2 border-transparent opacity-40 hover:opacity-100'}`}>
+                <button key={idx} onClick={() => { triggerHaptic(30); setActiveGalleryIndex(idx); }} className={`snap-center flex-shrink-0 w-24 h-16 rounded-lg overflow-hidden transition-all duration-300 ${activeGalleryIndex === idx ? 'border-2 border-[#e31818] opacity-100 scale-105 shadow-lg' : 'border-2 border-transparent opacity-40 hover:opacity-100'}`}>
                   <img src={imgUrl} className="w-full h-full object-cover" alt={`Thumb ${idx}`} />
                 </button>
               ))}

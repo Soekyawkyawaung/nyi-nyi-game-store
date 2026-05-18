@@ -70,6 +70,9 @@ export default function Home() {
   const [currentView, setCurrentView] = useState('store'); 
   const [showAuth, setShowAuth] = useState(false); 
   
+  // --- NEW: Tracks where the checkout was launched from ---
+  const [checkoutOrigin, setCheckoutOrigin] = useState('cart'); 
+
   const [games, setGames] = useState([]);
   const [giftCards, setGiftCards] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -89,7 +92,6 @@ export default function Home() {
   const [selectedGenres, setSelectedGenres] = useState([]);
   const [selectedPlatforms, setSelectedPlatforms] = useState([]);
 
-  // --- HAPTIC FEEDBACK HELPER ---
   const triggerHaptic = (pattern = 50) => {
     if (typeof window !== 'undefined' && navigator.vibrate) {
       try { navigator.vibrate(pattern); } catch (e) {}
@@ -144,15 +146,12 @@ export default function Home() {
       setGiftCards(giftsData);
       setIsLoading(false);
 
-      // --- NEW: CATCH SHARED LINKS SAFELY ---
       if (typeof window !== 'undefined') {
         const urlParams = new URLSearchParams(window.location.search);
         const sharedGameId = urlParams.get('game');
         
         if (sharedGameId) {
-          const foundGame = gamesData.find(g => g.id.toString() === sharedGameId) 
-                         || giftsData.find(g => g.id.toString() === sharedGameId);
-          
+          const foundGame = gamesData.find(g => g.id.toString() === sharedGameId) || giftsData.find(g => g.id.toString() === sharedGameId);
           if (foundGame) {
             setSelectedGame(foundGame);
             setCurrentView('details');
@@ -163,7 +162,6 @@ export default function Home() {
     };
     
     fetchStoreData();
-
     const savedRecent = JSON.parse(localStorage.getItem('nyinyi_history') || '[]');
     setRecentlyViewed(savedRecent);
   }, []);
@@ -341,11 +339,42 @@ export default function Home() {
         
         <main className="w-full">
           {currentView === 'profile' && <Profile onBack={() => { triggerHaptic(30); setCurrentView('store'); }} />}
-          {currentView === 'cart' && <Cart onBack={() => { triggerHaptic(30); setCurrentView('store'); }} onCheckout={() => { triggerHaptic(30); setCurrentView('checkout'); }} promotedGamesIds={promotedGamesIds} />}
-          {currentView === 'wishlist' && <Wishlist onBack={() => { triggerHaptic(30); setCurrentView('store'); }} onGameClick={handleGameClick} promotedGamesIds={promotedGamesIds} />}
+          
+          {currentView === 'cart' && <Cart onBack={() => { triggerHaptic(30); setCurrentView('store'); }} onCheckout={() => { triggerHaptic(30); setCheckoutOrigin('cart'); setCurrentView('checkout'); }} />}
+          
+          {currentView === 'wishlist' && <Wishlist onBack={() => { triggerHaptic(30); setCurrentView('store'); }} onGameClick={handleGameClick} />}
+          
           {currentView === 'orders' && <MyOrders onBack={() => { triggerHaptic(30); setCurrentView('store'); }} />}
-          {currentView === 'checkout' && <div className="animate-in slide-in-from-right duration-300 bg-white dark:bg-[#121212] min-h-screen pt-4"><button onClick={() => { triggerHaptic(30); setCurrentView('cart'); }} className="mx-4 mb-2 text-sm font-bold text-blue-600 dark:text-blue-400 hover:underline">← Back to Cart</button><Checkout promotedGamesIds={promotedGamesIds} /></div>}
-          {currentView === 'details' && selectedGame && <ProductDetail game={selectedGame} allGames={[...games, ...giftCards]} onBack={() => { triggerHaptic(30); setCurrentView('store'); }} onBuyNow={() => checkAuthAndNavigate('checkout')} onGameClick={handleGameClick} promoPrice={promotedGamesIds[selectedGame.id]} />}
+          
+          {/* --- SMART DYNAMIC CHECKOUT VIEW --- */}
+          {currentView === 'checkout' && (
+            <div className="animate-in slide-in-from-right duration-300 bg-white dark:bg-[#121212] min-h-screen pt-4">
+              <button 
+                onClick={() => { 
+                  triggerHaptic(30); 
+                  setCurrentView(checkoutOrigin === 'details' ? 'details' : 'cart'); 
+                  if (checkoutOrigin === 'details') localStorage.removeItem('nyinyi_buynow'); 
+                }} 
+                className="mx-4 mb-2 text-sm font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              >
+                <ArrowLeft className="w-4 h-4" /> 
+                {checkoutOrigin === 'details' 
+                  ? (lang === 'mm' ? 'နောက်သို့' : lang === 'zh' ? '返回' : 'Back') 
+                  : (lang === 'mm' ? 'စျေးခြင်းတောင်းသို့' : lang === 'zh' ? '返回购物车' : 'Back to Cart')}
+              </button>
+              <Checkout isBuyNow={checkoutOrigin === 'details'} onCheckoutSuccess={() => setCurrentView('orders')} />
+            </div>
+          )}
+
+          {currentView === 'details' && selectedGame && (
+            <ProductDetail 
+              game={selectedGame} 
+              allGames={[...games, ...giftCards]} 
+              onBack={() => { triggerHaptic(30); setCurrentView('store'); }} 
+              onBuyNow={() => { triggerHaptic(30); setCheckoutOrigin('details'); checkAuthAndNavigate('checkout'); }} 
+              onGameClick={handleGameClick} 
+            />
+          )}
           
           {/* --- SEE ALL GRID --- */}
           {currentView === 'seeAll' && (

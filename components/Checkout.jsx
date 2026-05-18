@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase';
 import { useLanguage } from './LanguageContext';
 import toast from 'react-hot-toast';
 
-const Checkout = () => {
+const Checkout = ({ isBuyNow, onCheckoutSuccess }) => {
   const { lang } = useLanguage();
   const [cartItems, setCartItems] = useState([]);
   const [totalPrice, setTotalPrice] = useState(0);
@@ -19,7 +19,6 @@ const Checkout = () => {
   const [isSuccess, setIsSuccess] = useState(false);
   const [generatedOrderNo, setGeneratedOrderNo] = useState('');
 
-  // --- HAPTIC FEEDBACK HELPER ---
   const triggerHaptic = (pattern = 50) => {
     if (typeof window !== 'undefined' && navigator.vibrate) {
       try { navigator.vibrate(pattern); } catch (e) {}
@@ -28,20 +27,43 @@ const Checkout = () => {
 
   useEffect(() => {
     fetchCartData();
-  }, []);
+  }, [isBuyNow]);
 
   const fetchCartData = async () => {
     setIsLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
+      
+      // --- ISOLATED BUY NOW LOGIC ---
+      if (isBuyNow) {
+        const buyNowItem = JSON.parse(localStorage.getItem('nyinyi_buynow') || '[]');
+        if (buyNowItem.length > 0) {
+          setCartItems(buyNowItem);
+          const total = buyNowItem.reduce((sum, item) => {
+            const isGift = !!item.gift_cards;
+            let priceToUse = 0;
+            if (isGift && item.selected_option) {
+              priceToUse = Number(item.selected_option.price);
+            } else if (item.games) {
+              if (item.account_type === 'PS4 Edition') priceToUse = item.games.ps4_discount_price || item.games.ps4_price;
+              else priceToUse = item.games.discount_price || item.games.price;
+            }
+            return sum + (Number(priceToUse) * (item.quantity || 1));
+          }, 0);
+          setTotalPrice(total);
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      // --- STANDARD CART LOGIC ---
       const { data, error } = await supabase
         .from('cart')
-        .select('id, selected_option, quantity, games(*), gift_cards(*)')
+        .select('id, selected_option, account_type, quantity, games(*), gift_cards(*)')
         .eq('user_id', session.user.id);
         
       if (!error && data) {
         setCartItems(data);
-        
         const total = data.reduce((sum, item) => {
           const isGift = !!item.gift_cards;
           let priceToUse = 0;
@@ -49,7 +71,8 @@ const Checkout = () => {
           if (isGift && item.selected_option) {
             priceToUse = Number(item.selected_option.price);
           } else if (item.games) {
-            priceToUse = (item.games.discount_price || item.games.price);
+            if (item.account_type === 'PS4 Edition') priceToUse = item.games.ps4_discount_price || item.games.ps4_price;
+            else priceToUse = item.games.discount_price || item.games.price;
           }
           
           return sum + (Number(priceToUse) * (item.quantity || 1));
@@ -63,7 +86,7 @@ const Checkout = () => {
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
-      triggerHaptic(30); // Light tap on file select
+      triggerHaptic(30); 
       setScreenshotFile(e.target.files[0]);
       setScreenshotPreview(URL.createObjectURL(e.target.files[0]));
     }
@@ -71,12 +94,12 @@ const Checkout = () => {
 
   const handleConfirmPayment = async () => {
     if (!screenshotFile) {
-      triggerHaptic(200); // Error buzz
+      triggerHaptic(200); 
       toast.error(lang === 'mm' ? "ငွေလွှဲပြေစာ ထည့်ပါ" : lang === 'zh' ? "请上传付款截图" : "Please upload your payment screenshot first!");
       return;
     }
 
-    triggerHaptic(50); // Tap to indicate processing started
+    triggerHaptic(50); 
     setIsSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -100,12 +123,15 @@ const Checkout = () => {
           
           let priceToUse = 0;
           if (isGift) priceToUse = item.selected_option.price;
-          else priceToUse = (targetItem.discount_price || targetItem.price);
+          else {
+            if (item.account_type === 'PS4 Edition') priceToUse = targetItem.ps4_discount_price || targetItem.ps4_price;
+            else priceToUse = targetItem.discount_price || targetItem.price;
+          }
 
           return { 
             id: targetItem.id,
             name: targetItem.name, 
-            account_type: isGift ? item.selected_option.label : 'Game',
+            account_type: isGift ? item.selected_option.label : (item.account_type || 'Standard Edition'),
             price: priceToUse,
             quantity: item.quantity || 1,
             cover_image: targetItem.cover_image || targetItem.image 
@@ -116,10 +142,14 @@ const Checkout = () => {
       }]);
       if (dbError) throw dbError;
 
-      await supabase.from('cart').delete().eq('user_id', session.user.id);
-      window.dispatchEvent(new Event('cartUpdated'));
+      if (isBuyNow) {
+        localStorage.removeItem('nyinyi_buynow');
+      } else {
+        await supabase.from('cart').delete().eq('user_id', session.user.id);
+        window.dispatchEvent(new Event('cartUpdated'));
+      }
 
-      triggerHaptic([100, 50, 100, 50, 100]); // Long celebratory vibration sequence
+      triggerHaptic([100, 50, 100, 50, 100]); 
       setIsSuccess(true);
     } catch (error) {
       triggerHaptic(200); 
@@ -167,14 +197,19 @@ const Checkout = () => {
 
             let itemPrice = 0;
             if (isGift) itemPrice = item.selected_option.price;
-            else itemPrice = (targetItem.discount_price || targetItem.price);
+            else {
+              if (item.account_type === 'PS4 Edition') itemPrice = targetItem.ps4_discount_price || targetItem.ps4_price;
+              else itemPrice = targetItem.discount_price || targetItem.price;
+            }
 
             const totalItemPrice = Number(itemPrice) * itemQty;
 
             return (
               <div key={item.id} className="flex justify-between items-center bg-gray-50 dark:bg-[#0a0a0a] p-3 rounded-lg border border-gray-100 dark:border-gray-800 gap-2">
                 <div className="flex flex-col truncate flex-1 pr-1">
-                  <span className="text-sm font-bold text-gray-900 dark:text-white truncate leading-tight">{itemQty}x {targetItem?.name}</span>
+                  <span className="text-sm font-bold text-gray-900 dark:text-white truncate leading-tight">
+                    {itemQty}x {targetItem?.name} {item.account_type && item.account_type !== 'Standard Edition' && !isGift ? `(${item.account_type})` : ''}
+                  </span>
                   {isGift && <span className="text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest mt-1">{item.selected_option?.label}</span>}
                 </div>
                 <span className="text-sm font-black text-black dark:text-white whitespace-nowrap">{totalItemPrice.toLocaleString()} MMK</span>

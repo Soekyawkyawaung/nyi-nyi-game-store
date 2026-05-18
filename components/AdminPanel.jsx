@@ -1,11 +1,22 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Gamepad2, Image as ImageIcon, PlusCircle, Save, LogOut, Loader2, Tags, Trash2, Edit, ShoppingBag, Search, Filter, CreditCard, Plus, X, Menu, UploadCloud, Calendar, Clock, CheckCircle } from 'lucide-react';
+import { Gamepad2, Image as ImageIcon, PlusCircle, Save, LogOut, Loader2, Tags, Trash2, Edit, ShoppingBag, Search, Filter, CreditCard, Plus, X, Menu, UploadCloud, Calendar, Clock, CheckCircle, Mail, Key, Lock, ShieldAlert } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
 const AdminPanel = ({ onBackToStore }) => {
+  // --- SECURE AUTHENTICATION STATES ---
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // --- NYI NYI STORE ADMIN EMAILS ---
+  const ADMIN_EMAILS = ['kyone94@gmail.com', 'nyinyi666654645@gmail.com'];
+
   const [activeTab, setActiveTab] = useState('orders'); 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); 
   
@@ -25,6 +36,11 @@ const AdminPanel = ({ onBackToStore }) => {
   const [gameName, setGameName] = useState('');
   const [price, setPrice] = useState('');
   const [discountPrice, setDiscountPrice] = useState('');
+  
+  // --- DUAL PS4/PS5 PRICING STATES ---
+  const [ps4Price, setPs4Price] = useState('');
+  const [ps4DiscountPrice, setPs4DiscountPrice] = useState('');
+
   const [releaseDate, setReleaseDate] = useState(''); 
   const [youtubeLink, setYoutubeLink] = useState('');
   const [description, setDescription] = useState('');
@@ -35,10 +51,14 @@ const AdminPanel = ({ onBackToStore }) => {
   const [coverUrlInput, setCoverUrlInput] = useState(''); 
   const [coverPreview, setCoverPreview] = useState(null); 
   const [screenshotInputs, setScreenshotInputs] = useState(() => Array.from({ length: 6 }, () => ({ file: null, url: '', preview: null })));
-  const [existingScreenshots, setExistingScreenshots] = useState([]); 
   const [isSavingGame, setIsSavingGame] = useState(false);
   const [isPS5, setIsPS5] = useState(false);
   const [isPS4, setIsPS4] = useState(false);
+
+  // --- PAGINATION STATES ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const [jumpPageInput, setJumpPageInput] = useState('1');
+  const ITEMS_PER_PAGE = 20;
 
   // --- SLIDER & GIFT CARD STATES ---
   const [sliderFiles, setSliderFiles] = useState({ 1: null, 2: null, 3: null, 4: null, 5: null });
@@ -53,9 +73,39 @@ const AdminPanel = ({ onBackToStore }) => {
   const [giftCoverFile, setGiftCoverFile] = useState(null);
   const [isSavingGift, setIsSavingGift] = useState(false);
 
+  // 1. CHECK SESSION ON MOUNT
   useEffect(() => {
-    fetchGames(); fetchOrders(); fetchGiftCards();
+    const checkAdminSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.email && ADMIN_EMAILS.includes(session.user.email.toLowerCase())) {
+        setIsAuthenticated(true);
+      }
+      setAuthLoading(false);
+    };
+    checkAdminSession();
   }, []);
+
+  // 2. FETCH DATA ONLY IF AUTHENTICATED
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    fetchData();
+
+    const orderSubscription = supabase
+      .channel('admin-order-alerts')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+        const audio = new Audio('/notification-ding.mp3');
+        audio.play().catch(e => console.log("Audio play blocked by browser"));
+        if (Notification.permission === 'granted') {
+          new Notification('New Order Received! 🎮', {
+            body: `Order ${payload.new.order_no} placed for ${payload.new.total_price?.toLocaleString()} MMK.`,
+            icon: '/logo.jpg', 
+          });
+        }
+        fetchData();
+      }).subscribe();
+
+    return () => { supabase.removeChannel(orderSubscription); };
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (gamesList.length > 0) {
@@ -65,21 +115,61 @@ const AdminPanel = ({ onBackToStore }) => {
     }
   }, [gamesList]);
 
-  const fetchGames = async () => {
+  // Reset pagination to Page 1 when searching
+  useEffect(() => {
+    setCurrentPage(1);
+    setJumpPageInput('1');
+  }, [gameSearch]);
+
+  const fetchData = async () => {
     setIsLoadingGames(true);
-    const { data, error } = await supabase.from('games').select('*').order('created_at', { ascending: false });
-    if (!error && data) setGamesList(data);
+    const [oRes, gRes, gcRes] = await Promise.all([
+      supabase.from('orders').select('*').order('created_at', { ascending: false }),
+      supabase.from('games').select('*').order('created_at', { ascending: false }),
+      supabase.from('gift_cards').select('*').order('created_at', { ascending: false })
+    ]);
+    setOrdersList(oRes.data || []);
+    setGamesList(gRes.data || []);
+    setGiftCardsList(gcRes.data || []);
     setIsLoadingGames(false);
   };
 
-  const fetchGiftCards = async () => {
-    const { data, error } = await supabase.from('gift_cards').select('*').order('created_at', { ascending: false });
-    if (!error && data) setGiftCardsList(data);
+  // --- SECURE LOGIN HANDLER ---
+  const handleAdminLogin = async (e) => {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setLoginError('');
+
+    try {
+      if (!ADMIN_EMAILS.includes(loginEmail.toLowerCase())) {
+         throw new Error("Unauthorized: This email does not have admin privileges.");
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password: loginPassword,
+      });
+
+      if (error) throw error;
+
+      if (data?.user?.email && ADMIN_EMAILS.includes(data.user.email.toLowerCase())) {
+        setIsAuthenticated(true);
+        toast.success("Welcome back, Admin!");
+      } else {
+        await supabase.auth.signOut();
+        throw new Error("Unauthorized Access.");
+      }
+    } catch (error) {
+      setLoginError(error.message);
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
 
-  const fetchOrders = async () => {
-    const { data } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
-    if (data) setOrdersList(data);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsAuthenticated(false);
+    onBackToStore();
   };
 
   const pendingOrdersCount = ordersList.filter(o => o.status === 'pending').length;
@@ -98,6 +188,30 @@ const AdminPanel = ({ onBackToStore }) => {
     return game.name.toLowerCase().includes(searchLower) || (game.collections && game.collections.some(c => c.toLowerCase().includes(searchLower)));
   });
 
+  // --- PAGINATION LOGIC ---
+  const totalPages = Math.max(1, Math.ceil(filteredGames.length / ITEMS_PER_PAGE));
+  const currentGames = filteredGames.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      setJumpPageInput(newPage.toString());
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleJumpPage = (e) => {
+    e.preventDefault();
+    const pageNum = parseInt(jumpPageInput, 10);
+    if (pageNum >= 1 && pageNum <= totalPages) {
+      setCurrentPage(pageNum);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      toast.error(`Please enter a page between 1 and ${totalPages}`);
+      setJumpPageInput(currentPage.toString());
+    }
+  };
+
   const handleUpdateOrder = async (e) => {
     e.preventDefault();
     try {
@@ -106,8 +220,17 @@ const AdminPanel = ({ onBackToStore }) => {
       const { error } = await supabase.from('orders').update({ status, delivery_info: deliveryInfo }).eq('id', selectedOrder.id);
       if (error) throw error;
       toast.success("Order Updated!");
-      setSelectedOrder(null); fetchOrders(); 
+      setSelectedOrder(null); fetchData(); 
     } catch (error) { toast.error(error.message); }
+  };
+
+  const uploadImage = async (file, bucket) => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
+    const { error } = await supabase.storage.from(bucket).upload(fileName, file);
+    if (error) throw error;
+    const { data } = supabase.storage.from(bucket).getPublicUrl(fileName);
+    return data.publicUrl;
   };
 
   const handleScreenshotFileChange = (index, file) => {
@@ -121,26 +244,55 @@ const AdminPanel = ({ onBackToStore }) => {
     setScreenshotInputs(prev => prev.map((item, i) => i === index ? { file: null, url: '', preview: null } : item));
   };
 
+  const handleQuickAddCollection = (tag) => {
+    const currentTags = collections.split(',').map(t => t.trim()).filter(Boolean);
+    if (!currentTags.includes(tag)) setCollections(currentTags.length > 0 ? `${collections}, ${tag}` : tag);
+  };
+
+  const resetForm = () => {
+    setEditGameId(null); setGameName(''); setPrice(''); setDiscountPrice(''); 
+    setPs4Price(''); setPs4DiscountPrice(''); // Reset dual prices
+    setReleaseDate(''); setYoutubeLink(''); setDescription(''); setGameSize(''); setCollections(''); 
+    setIsPS5(false); setIsPS4(false); setCoverFile(null); setCoverUrlInput(''); setCoverPreview(null); 
+    setScreenshotInputs(Array.from({ length: 6 }, () => ({ file: null, url: '', preview: null })));
+    setShowGameForm(false);
+  };
+
+  const handleEditClick = (game) => {
+    setEditGameId(game.id); 
+    setGameName(game.name); 
+    setPrice(game.price ? game.price.toString() : '');
+    setDiscountPrice(game.discount_price ? game.discount_price.toString() : '');
+    
+    // Load dual PS4 prices if they exist
+    setPs4Price(game.ps4_price ? game.ps4_price.toString() : '');
+    setPs4DiscountPrice(game.ps4_discount_price ? game.ps4_discount_price.toString() : '');
+
+    setReleaseDate(game.release_date ? new Date(game.release_date).toISOString().split('T')[0] : '');
+    setGameSize(game.size || ''); setYoutubeLink(game.youtube_link || ''); setDescription(game.description || '');
+    setCollections(game.collections?.filter(tag => tag !== "PS5 Games" && tag !== "PS4 Games").join(', ') || '');
+    setIsPS5(game.collections?.includes("PS5 Games") || false); setIsPS4(game.collections?.includes("PS4 Games") || false);
+    setCoverFile(null); setCoverUrlInput(''); setCoverPreview(game.cover_image); 
+    setScreenshotInputs(prev => prev.map((item, i) => game.screenshots?.[i] ? { file: null, url: game.screenshots[i], preview: game.screenshots[i] } : { file: null, url: '', preview: null }));
+    setShowGameForm(true);
+  };
+
   const handleSaveGame = async (e) => {
     e.preventDefault();
     setIsSavingGame(true);
     try {
       let finalCoverUrl = null;
       if (coverFile) {
-        const fileName = `cover-${Date.now()}.${coverFile.name.split('.').pop()}`;
-        const { error } = await supabase.storage.from('game_covers').upload(fileName, coverFile);
-        if (error) throw error;
-        finalCoverUrl = supabase.storage.from('game_covers').getPublicUrl(fileName).data.publicUrl;
-      } else if (coverUrlInput) finalCoverUrl = coverUrlInput;
+        finalCoverUrl = await uploadImage(coverFile, 'game_covers');
+      } else if (coverUrlInput) {
+        finalCoverUrl = coverUrlInput;
+      }
 
       let finalScreenshotUrls = [];
       for (let i = 0; i < screenshotInputs.length; i++) {
         const input = screenshotInputs[i];
         if (input.file) {
-          const fileName = `ss-${i+1}-${Date.now()}.${input.file.name.split('.').pop()}`;
-          const { error } = await supabase.storage.from('game_covers').upload(fileName, input.file);
-          if (error) throw error;
-          finalScreenshotUrls.push(supabase.storage.from('game_covers').getPublicUrl(fileName).data.publicUrl);
+          finalScreenshotUrls.push(await uploadImage(input.file, 'game_covers'));
         } else if (input.url) finalScreenshotUrls.push(input.url);
       }
 
@@ -150,10 +302,18 @@ const AdminPanel = ({ onBackToStore }) => {
       collectionsArray = [...new Set(collectionsArray)]; 
 
       const gameData = {
-        name: gameName, price: parseFloat(price), discount_price: discountPrice ? parseFloat(discountPrice) : null,
+        name: gameName, 
+        price: parseFloat(price) || 0, 
+        discount_price: discountPrice ? parseFloat(discountPrice) : null,
+        // DYNAMIC DUAL PRICING LOGIC
+        ps4_price: (isPS4 && isPS5 && ps4Price) ? parseFloat(ps4Price) : null,
+        ps4_discount_price: (isPS4 && isPS5 && ps4DiscountPrice) ? parseFloat(ps4DiscountPrice) : null,
         release_date: releaseDate ? new Date(releaseDate).toISOString() : null,
-        size: gameSize, youtube_link: youtubeLink, description: description,
-        collections: collectionsArray, screenshots: finalScreenshotUrls, 
+        size: gameSize, 
+        youtube_link: youtubeLink, 
+        description: description,
+        collections: collectionsArray, 
+        screenshots: finalScreenshotUrls, 
       };
 
       if (finalCoverUrl) gameData.cover_image = finalCoverUrl;
@@ -168,39 +328,14 @@ const AdminPanel = ({ onBackToStore }) => {
         if (error) throw error;
         toast.success("Game added successfully!");
       }
-      resetForm(); fetchGames();
+      resetForm(); fetchData();
     } catch (error) { toast.error(error.message); } finally { setIsSavingGame(false); }
-  };
-
-  const handleEditClick = (game) => {
-    setEditGameId(game.id); setGameName(game.name); setPrice(game.price.toString());
-    setDiscountPrice(game.discount_price ? game.discount_price.toString() : '');
-    setReleaseDate(game.release_date ? new Date(game.release_date).toISOString().split('T')[0] : '');
-    setGameSize(game.size || ''); setYoutubeLink(game.youtube_link || ''); setDescription(game.description || '');
-    setCollections(game.collections?.filter(tag => tag !== "PS5 Games" && tag !== "PS4 Games").join(', ') || '');
-    setIsPS5(game.collections?.includes("PS5 Games") || false); setIsPS4(game.collections?.includes("PS4 Games") || false);
-    setCoverFile(null); setCoverUrlInput(''); setCoverPreview(game.cover_image); 
-    setScreenshotInputs(prev => prev.map((item, i) => game.screenshots?.[i] ? { file: null, url: game.screenshots[i], preview: game.screenshots[i] } : { file: null, url: '', preview: null }));
-    setShowGameForm(true);
-  };
-
-  const resetForm = () => {
-    setEditGameId(null); setGameName(''); setPrice(''); setDiscountPrice(''); setReleaseDate(''); 
-    setYoutubeLink(''); setDescription(''); setGameSize(''); setCollections(''); 
-    setIsPS5(false); setIsPS4(false); setCoverFile(null); setCoverUrlInput(''); setCoverPreview(null); 
-    setScreenshotInputs(Array.from({ length: 6 }, () => ({ file: null, url: '', preview: null })));
-    setShowGameForm(false);
   };
 
   const handleDeleteGame = async (id) => {
     if (!window.confirm("Are you sure you want to delete this game?")) return;
     const { error } = await supabase.from('games').delete().eq('id', id);
-    if (error) toast.error(error.message); else { toast.success("Game deleted."); fetchGames(); }
-  };
-
-  const handleQuickAddCollection = (tag) => {
-    const currentTags = collections.split(',').map(t => t.trim()).filter(Boolean);
-    if (!currentTags.includes(tag)) setCollections(currentTags.length > 0 ? `${collections}, ${tag}` : tag);
+    if (error) toast.error(error.message); else { toast.success("Game deleted."); fetchData(); }
   };
 
   const getPlatformTags = (gameCollections) => {
@@ -221,21 +356,18 @@ const AdminPanel = ({ onBackToStore }) => {
     try {
       let finalImageUrl = giftCoverPreview;
       if (giftCoverFile) {
-        const fileName = `gift-${Date.now()}.${giftCoverFile.name.split('.').pop()}`;
-        const { error } = await supabase.storage.from('game_covers').upload(fileName, giftCoverFile);
-        if (error) throw error;
-        finalImageUrl = supabase.storage.from('game_covers').getPublicUrl(fileName).data.publicUrl;
+        finalImageUrl = await uploadImage(giftCoverFile, 'game_covers');
       }
       if (!finalImageUrl) throw new Error("An image is required!");
       const giftData = { name: giftName, description: giftDescription, image: finalImageUrl, options: giftOptions.filter(opt => opt.label && opt.price) };
       if (editGiftId) await supabase.from('gift_cards').update(giftData).eq('id', editGiftId);
       else await supabase.from('gift_cards').insert([giftData]);
-      toast.success("Gift Card Saved!"); resetGiftForm(); fetchGiftCards();
+      toast.success("Gift Card Saved!"); resetGiftForm(); fetchData();
     } catch (error) { toast.error(error.message); } finally { setIsSavingGift(false); }
   };
   const resetGiftForm = () => { setEditGiftId(null); setGiftName(''); setGiftDescription(''); setGiftOptions([{ label: '', price: '' }]); setGiftCoverPreview(null); setGiftCoverFile(null); setShowGiftForm(false); };
   const handleEditGift = (gift) => { setEditGiftId(gift.id); setGiftName(gift.name); setGiftDescription(gift.description); setGiftOptions(gift.options); setGiftCoverPreview(gift.image); setShowGiftForm(true); };
-  const handleDeleteGift = async (id) => { if (window.confirm("Delete?")) { await supabase.from('gift_cards').delete().eq('id', id); fetchGiftCards(); } };
+  const handleDeleteGift = async (id) => { if (window.confirm("Delete?")) { await supabase.from('gift_cards').delete().eq('id', id); fetchData(); } };
 
   const handleSaveSlider = async (e) => {
     e.preventDefault(); setIsUploadingSlider(true);
@@ -255,13 +387,64 @@ const AdminPanel = ({ onBackToStore }) => {
     } catch (error) { toast.error(error.message); } finally { setIsUploadingSlider(false); }
   };
 
+  // --- ADMIN LOGIN GATEWAY UI ---
+  if (authLoading) return <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]"><Loader2 className="h-10 w-10 animate-spin text-[#e31818]" /></div>;
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a] px-4 font-sans relative">
+        <div className="absolute top-4 left-4">
+          <button onClick={onBackToStore} className="flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-white transition-colors">
+            <ArrowLeft className="w-4 h-4" /> Back to Store
+          </button>
+        </div>
+        <div className="w-full max-w-md bg-[#121212] border border-gray-800 rounded-3xl shadow-2xl p-8 animate-in zoom-in-95 duration-300">
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-16 h-16 bg-gray-900 border border-gray-800 rounded-2xl flex items-center justify-center mb-4 shadow-inner">
+              <ShieldAlert className="w-8 h-8 text-[#e31818]" />
+            </div>
+            <h1 className="text-2xl font-black text-white tracking-tight">NYINYI<span className="text-[#e31818]">ADMIN</span></h1>
+            <p className="text-sm font-semibold text-gray-500 mt-1">Restricted Access Only</p>
+          </div>
+
+          <form onSubmit={handleAdminLogin} className="flex flex-col gap-4">
+            {loginError && (
+              <div className="bg-red-900/20 border border-red-900/50 text-red-500 text-xs font-bold p-3 rounded-xl text-center">
+                {loginError}
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-bold text-gray-400 mb-2 uppercase tracking-wider">Admin Email</label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-600" />
+                <input type="email" required value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="w-full bg-[#1a1a1a] border border-gray-800 text-white rounded-xl pl-12 pr-4 py-3.5 text-sm font-bold outline-none focus:border-[#e31818] transition-colors" placeholder="admin@example.com" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 mb-2 uppercase tracking-wider">Password</label>
+              <div className="relative">
+                <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-600" />
+                <input type="password" required value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="w-full bg-[#1a1a1a] border border-gray-800 text-white rounded-xl pl-12 pr-4 py-3.5 text-sm font-bold outline-none focus:border-[#e31818] transition-colors" placeholder="••••••••" />
+              </div>
+            </div>
+            <button type="submit" disabled={isLoggingIn} className="mt-4 w-full bg-[#e31818] hover:bg-red-700 text-white font-black py-4 rounded-xl flex justify-center items-center gap-2 active:scale-95 transition-all shadow-lg shadow-red-900/20">
+              {isLoggingIn ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Lock className="w-5 h-5" /> VERIFY & ENTER</>}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoadingGames) return <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-[#0a0a0a]"><Loader2 className="h-10 w-10 animate-spin text-[#e31818]" /></div>;
+
   return (
     <div className="flex h-screen w-full bg-gray-50 dark:bg-[#0a0a0a] font-sans relative overflow-hidden transition-colors duration-300">
       {isSidebarOpen && <div className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm md:hidden" onClick={() => setIsSidebarOpen(false)}></div>}
 
       <aside className={`fixed inset-y-0 left-0 z-[200] w-64 transform bg-gray-900 dark:bg-[#121212] flex flex-col text-white shadow-xl transition-transform duration-300 md:relative md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 border-b border-gray-800 flex justify-between items-center">
-          <div><h1 className="text-xl font-black tracking-tight text-white">ADMIN PANEL</h1></div>
+          <div><h1 className="text-xl font-black tracking-tight text-white">NYINYI<span className="text-[#e31818]">ADMIN</span></h1></div>
           <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-gray-400 hover:text-white"><X className="h-6 w-6" /></button>
         </div>
         <nav className="flex-1 py-6 px-3 flex flex-col gap-2 overflow-y-auto">
@@ -273,7 +456,7 @@ const AdminPanel = ({ onBackToStore }) => {
           <button onClick={() => { setActiveTab('giftcards'); setShowGiftForm(false); setIsSidebarOpen(false); }} className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-colors ${activeTab === 'giftcards' ? 'bg-[#e31818] text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}><CreditCard className="h-5 w-5" /> Manage Gift Cards</button>
           <button onClick={() => { setActiveTab('slider'); setIsSidebarOpen(false); }} className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-colors ${activeTab === 'slider' ? 'bg-[#e31818] text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}><ImageIcon className="h-5 w-5" /> Hero Slider</button>
         </nav>
-        <div className="p-4 border-t border-gray-800"><button onClick={onBackToStore} className="flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-2.5 text-sm font-bold text-white hover:bg-white/20 transition-colors"><LogOut className="h-4 w-4" /> Exit Admin</button></div>
+        <div className="p-4 border-t border-gray-800"><button onClick={handleLogout} className="flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-2.5 text-sm font-bold text-white hover:bg-white/20 transition-colors"><LogOut className="h-4 w-4" /> Exit Admin</button></div>
       </aside>
 
       <div className="flex-1 flex flex-col h-full overflow-hidden relative">
@@ -310,7 +493,7 @@ const AdminPanel = ({ onBackToStore }) => {
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-[#121212] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-x-auto transition-colors">
+              <div className="bg-white dark:bg-[#121212] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-x-auto transition-colors [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 <table className="w-full text-left border-collapse whitespace-nowrap md:whitespace-normal">
                   <thead>
                     <tr className="bg-gray-50 dark:bg-[#0a0a0a] border-b border-gray-200 dark:border-gray-800 text-sm text-gray-500 dark:text-gray-400">
@@ -367,6 +550,26 @@ const AdminPanel = ({ onBackToStore }) => {
                       {selectedOrder.items.map((i, idx) => <li key={idx} className="mb-1">{i.name} {i.account_type && i.account_type !== 'Game' ? `(${i.account_type})` : ''} - {i.price} MMK (Qty: {i.quantity || 1})</li>)}
                     </ul>
                     <form onSubmit={handleUpdateOrder} className="flex flex-col gap-4">
+                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-2 flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest block mb-2">Customer Paid Via</span>
+                          {selectedOrder.delivery_info?.includes('Payment Method Used:') ? (
+                            <div className="flex items-center gap-3">
+                              {selectedOrder.delivery_info.toUpperCase().includes('KBZ') ? (
+                                 <img src="/kbz_logo.png" alt="KBZPay" className="h-8 rounded bg-white p-1 border border-gray-200 shadow-sm" />
+                              ) : selectedOrder.delivery_info.toUpperCase().includes('WAVE') ? (
+                                 <img src="/wave_logo.jpg" alt="WavePay" className="h-8 rounded bg-white p-1 border border-gray-200 shadow-sm" />
+                              ) : null}
+                              <span className="text-base font-black text-gray-900">
+                                {selectedOrder.delivery_info.split('Payment Method Used:')[1].trim()}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-sm font-bold text-gray-500">Already Verified / See Receipt</span>
+                          )}
+                        </div>
+                      </div>
+
                       <div>
                         <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Payment Status</label>
                         <select name="status" defaultValue={selectedOrder.status} className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#0a0a0a] px-4 py-3 text-gray-900 dark:text-white outline-none">
@@ -376,7 +579,7 @@ const AdminPanel = ({ onBackToStore }) => {
                       </div>
                       <div>
                         <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Redeem Code / Account Details to Send to User</label>
-                        <textarea name="deliveryInfo" defaultValue={selectedOrder.delivery_info || ''} rows="4" className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#0a0a0a] px-4 py-3 text-gray-900 dark:text-white outline-none placeholder-gray-400" placeholder="Type the game code or account password here..."></textarea>
+                        <textarea name="deliveryInfo" defaultValue={selectedOrder.delivery_info?.includes('Payment Method Used:') ? selectedOrder.delivery_info.split('Payment Method Used:')[0].trim() : (selectedOrder.delivery_info || '')} rows="4" className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#0a0a0a] px-4 py-3 text-gray-900 dark:text-white outline-none placeholder-gray-400" placeholder="Type the game code or account password here..."></textarea>
                       </div>
                       <button type="submit" className="mt-2 w-full md:w-auto rounded-xl bg-black dark:bg-white px-6 py-3 font-bold text-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-200">Save & Notify User</button>
                     </form>
@@ -401,7 +604,7 @@ const AdminPanel = ({ onBackToStore }) => {
                   <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Store Catalog</h2>
                   <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm md:text-base">Manage your games, prices, and categories.</p>
                 </div>
-                <button onClick={() => setShowGameForm(true)} className="w-full md:w-auto flex justify-center items-center gap-2 bg-[#e31818] text-white px-6 py-3 rounded-xl font-bold hover:bg-red-700 active:scale-95 transition-all">
+                <button onClick={() => { resetForm(); setShowGameForm(true); }} className="w-full md:w-auto flex justify-center items-center gap-2 bg-[#e31818] text-white px-6 py-3 rounded-xl font-bold hover:bg-red-700 active:scale-95 transition-all">
                   <PlusCircle className="h-5 w-5" /> Add New Game
                 </button>
               </div>
@@ -416,56 +619,109 @@ const AdminPanel = ({ onBackToStore }) => {
               {isLoadingGames ? (
                 <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-[#e31818]" /></div>
               ) : (
-                <div className="bg-white dark:bg-[#121212] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-x-auto transition-colors">
-                  <table className="w-full text-left border-collapse whitespace-nowrap md:whitespace-normal">
-                    <thead>
-                      <tr className="bg-gray-50 dark:bg-[#0a0a0a] border-b border-gray-200 dark:border-gray-800 text-sm text-gray-500 dark:text-gray-400">
-                        <th className="p-4 font-semibold">Game</th>
-                        <th className="p-4 font-semibold">Price</th>
-                        <th className="p-4 font-semibold hidden md:table-cell">Collections</th>
-                        <th className="p-4 font-semibold text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredGames.length === 0 ? (
-                        <tr><td colSpan="4" className="p-8 text-center text-gray-500">No games match your search.</td></tr>
-                      ) : (
-                        filteredGames.map(game => (
-                          <tr key={game.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">
-                            <td className="p-4 flex items-center gap-3 md:gap-4">
-                              <div className="h-10 w-10 md:h-12 md:w-12 rounded object-cover overflow-hidden bg-gray-100 border border-gray-100 dark:border-gray-700 relative group flex-shrink-0">
-                                <img src={game.cover_image} alt={game.name} className="h-full w-full object-cover transition-transform group-hover:scale-110" />
-                                {getPlatformTags(game.collections) && (
-                                  <div className="absolute top-0.5 left-0.5 bg-gray-800/80 text-white text-[8px] font-bold px-1 py-[1px] rounded shadow hidden md:block">{getPlatformTags(game.collections)}</div>
-                                )}
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="font-bold text-sm md:text-base text-gray-900 dark:text-white truncate max-w-[150px] md:max-w-xs">{game.name}</span>
-                                <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 hidden md:block">
-                                  {game.collections?.filter(t => t !== "PS5 Games" && t !== "PS4 Games").join(', ')}
+                <>
+                  <div className="bg-white dark:bg-[#121212] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-x-auto transition-colors [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                    <table className="w-full text-left border-collapse whitespace-nowrap md:whitespace-normal">
+                      <thead>
+                        <tr className="bg-gray-50 dark:bg-[#0a0a0a] border-b border-gray-200 dark:border-gray-800 text-sm text-gray-500 dark:text-gray-400">
+                          <th className="p-4 font-semibold">Game</th>
+                          <th className="p-4 font-semibold">Platform & Price</th>
+                          <th className="p-4 font-semibold hidden md:table-cell">Collections</th>
+                          <th className="p-4 font-semibold text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {currentGames.length === 0 ? (
+                          <tr><td colSpan="4" className="p-8 text-center text-gray-500">No games match your search.</td></tr>
+                        ) : (
+                          currentGames.map(game => (
+                            <tr key={game.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">
+                              <td className="p-4 flex items-center gap-3 md:gap-4">
+                                <div className="h-10 w-10 md:h-12 md:w-12 rounded object-cover overflow-hidden bg-gray-100 border border-gray-100 dark:border-gray-700 relative group flex-shrink-0">
+                                  <img src={game.cover_image} alt={game.name} className="h-full w-full object-cover transition-transform group-hover:scale-110" />
+                                  {getPlatformTags(game.collections) && (
+                                    <div className="absolute top-0.5 left-0.5 bg-gray-800/80 text-white text-[8px] font-bold px-1 py-[1px] rounded shadow hidden md:block">{getPlatformTags(game.collections)}</div>
+                                  )}
                                 </div>
-                              </div>
-                            </td>
-                            <td className="p-4 text-sm font-semibold text-gray-900 dark:text-white">
-                              {game.discount_price ? (
-                                <div className="flex flex-col"><span className="text-[#e31818] font-bold">{game.discount_price} MMK</span><span className="text-[10px] md:text-xs text-gray-400 line-through">{game.price} MMK</span></div>
-                              ) : (
-                                <span className="font-bold">{game.price} MMK</span>
-                              )}
-                            </td>
-                            <td className="p-4 text-xs text-gray-600 dark:text-gray-400 font-medium max-w-[200px] hidden md:table-cell">
-                              {game.collections?.map(c => <span key={c} className="inline-block bg-gray-100 dark:bg-gray-800 rounded px-2 py-1 mr-1 mb-1">{c}</span>)}
-                            </td>
-                            <td className="p-4 flex justify-end gap-2">
-                              <button onClick={() => handleEditClick(game)} className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"><Edit className="h-4 w-4" /></button>
-                              <button onClick={() => handleDeleteGame(game.id)} className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"><Trash2 className="h-4 w-4" /></button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                                <div className="flex flex-col">
+                                  <span className="font-bold text-sm md:text-base text-gray-900 dark:text-white truncate max-w-[150px] md:max-w-xs">{game.name}</span>
+                                  <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 hidden md:block">
+                                    {game.collections?.filter(t => t !== "PS5 Games" && t !== "PS4 Games").join(', ')}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="p-4 text-sm font-semibold text-gray-900 dark:text-white">
+                                {game.ps4_price ? (
+                                  <div className="flex flex-col gap-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-1.5 py-0.5 rounded font-bold">PS5</span>
+                                      {game.discount_price ? <span><span className="text-[#e31818] font-bold">{game.discount_price} MMK</span> <span className="text-gray-400 line-through text-[10px]">{game.price} MMK</span></span> : <span className="font-bold">{game.price} MMK</span>}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-1.5 py-0.5 rounded font-bold">PS4</span>
+                                      {game.ps4_discount_price ? <span><span className="text-[#e31818] font-bold">{game.ps4_discount_price} MMK</span> <span className="text-gray-400 line-through text-[10px]">{game.ps4_price} MMK</span></span> : <span className="font-bold">{game.ps4_price} MMK</span>}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  game.discount_price ? (
+                                    <div className="flex flex-col"><span className="text-[#e31818] font-bold">{game.discount_price} MMK</span><span className="text-[10px] md:text-xs text-gray-400 line-through">{game.price} MMK</span></div>
+                                  ) : (
+                                    <span className="font-bold">{game.price} MMK</span>
+                                  )
+                                )}
+                              </td>
+                              <td className="p-4 text-xs text-gray-600 dark:text-gray-400 font-medium max-w-[200px] hidden md:table-cell">
+                                {game.collections?.map(c => <span key={c} className="inline-block bg-gray-100 dark:bg-gray-800 rounded px-2 py-1 mr-1 mb-1">{c}</span>)}
+                              </td>
+                              <td className="p-4 flex justify-end gap-2">
+                                <button onClick={() => handleEditClick(game)} className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"><Edit className="h-4 w-4" /></button>
+                                <button onClick={() => handleDeleteGame(game.id)} className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"><Trash2 className="h-4 w-4" /></button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {totalPages > 1 && (
+                    <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-[#121212] p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm transition-colors">
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => handlePageChange(currentPage - 1)} 
+                          disabled={currentPage === 1}
+                          className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-[#0a0a0a] text-gray-700 dark:text-gray-300 font-bold disabled:opacity-50 hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                        >
+                          Previous
+                        </button>
+                        <span className="text-sm font-bold text-gray-600 dark:text-gray-400">
+                          Page {currentPage} of {totalPages}
+                        </span>
+                        <button 
+                          onClick={() => handlePageChange(currentPage + 1)} 
+                          disabled={currentPage === totalPages}
+                          className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-[#0a0a0a] text-gray-700 dark:text-gray-300 font-bold disabled:opacity-50 hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                        >
+                          Next
+                        </button>
+                      </div>
+                      <form onSubmit={handleJumpPage} className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-gray-600 dark:text-gray-400">Go to:</span>
+                        <input 
+                          type="number" 
+                          min="1" 
+                          max={totalPages}
+                          value={jumpPageInput}
+                          onChange={(e) => setJumpPageInput(e.target.value)}
+                          className="w-16 px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#0a0a0a] text-center text-sm font-bold text-gray-900 dark:text-white outline-none focus:border-[#e31818]"
+                        />
+                        <button type="submit" className="px-3 py-1.5 rounded-lg bg-[#e31818] text-white font-bold text-sm hover:bg-red-700 transition-colors active:scale-95">
+                          Go
+                        </button>
+                      </form>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -480,6 +736,7 @@ const AdminPanel = ({ onBackToStore }) => {
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   
+                  {/* COVER IMAGE */}
                   <div className="col-span-1 md:col-span-2 flex flex-col gap-4 p-4 border border-gray-100 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-[#0a0a0a]">
                     <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Game Cover Image</label>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
@@ -506,6 +763,7 @@ const AdminPanel = ({ onBackToStore }) => {
                     )}
                   </div>
 
+                  {/* GAME SCREENSHOTS */}
                   <div className="col-span-1 md:col-span-2 flex flex-col gap-4 p-5 border border-dashed border-gray-200 dark:border-gray-800 rounded-2xl bg-gray-50/50 dark:bg-[#0a0a0a]/50 mt-4">
                     <div className="flex items-center justify-between gap-2 border-b border-gray-100 dark:border-gray-800 pb-4 mb-2">
                       <h4 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -578,15 +836,47 @@ const AdminPanel = ({ onBackToStore }) => {
                     )}
                   </div>
                   
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Regular Price (MMK)</label>
-                    <input type="number" required value={price} onChange={(e) => setPrice(e.target.value)} className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#0a0a0a] px-4 py-3 text-gray-900 dark:text-white outline-none focus:border-[#e31818]" placeholder="150000" />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Discount Price <span className="text-gray-400">(Optional)</span></label>
-                    <input type="number" value={discountPrice} onChange={(e) => setDiscountPrice(e.target.value)} className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#0a0a0a] px-4 py-3 text-gray-900 dark:text-white outline-none focus:border-[#e31818]" placeholder="120000" />
-                  </div>
+                  {isPS4 && isPS5 ? (
+                    <>
+                      <div className="col-span-1 md:col-span-2 border-t border-gray-200 dark:border-gray-800 pt-6 mt-4">
+                        <h3 className="text-sm font-black text-gray-900 dark:text-white mb-4 uppercase tracking-widest">PS5 Edition Pricing</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">PS5 Regular Price (MMK)</label>
+                            <input type="number" required value={price} onChange={(e) => setPrice(e.target.value)} className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#0a0a0a] px-4 py-3 text-gray-900 dark:text-white outline-none focus:border-[#e31818]" placeholder="150000" />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">PS5 Discount Price <span className="text-gray-400">(Optional)</span></label>
+                            <input type="number" value={discountPrice} onChange={(e) => setDiscountPrice(e.target.value)} className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#0a0a0a] px-4 py-3 text-gray-900 dark:text-white outline-none focus:border-[#e31818]" placeholder="120000" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="col-span-1 md:col-span-2 border-t border-gray-200 dark:border-gray-800 pt-6 mt-4">
+                        <h3 className="text-sm font-black text-gray-900 dark:text-white mb-4 uppercase tracking-widest">PS4 Edition Pricing</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">PS4 Regular Price (MMK)</label>
+                            <input type="number" required value={ps4Price} onChange={(e) => setPs4Price(e.target.value)} className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#0a0a0a] px-4 py-3 text-gray-900 dark:text-white outline-none focus:border-[#e31818]" placeholder="140000" />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">PS4 Discount Price <span className="text-gray-400">(Optional)</span></label>
+                            <input type="number" value={ps4DiscountPrice} onChange={(e) => setPs4DiscountPrice(e.target.value)} className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#0a0a0a] px-4 py-3 text-gray-900 dark:text-white outline-none focus:border-[#e31818]" placeholder="110000" />
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Regular Price (MMK)</label>
+                        <input type="number" required value={price} onChange={(e) => setPrice(e.target.value)} className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#0a0a0a] px-4 py-3 text-gray-900 dark:text-white outline-none focus:border-[#e31818]" placeholder="150000" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Discount Price <span className="text-gray-400">(Optional)</span></label>
+                        <input type="number" value={discountPrice} onChange={(e) => setDiscountPrice(e.target.value)} className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#0a0a0a] px-4 py-3 text-gray-900 dark:text-white outline-none focus:border-[#e31818]" placeholder="120000" />
+                      </div>
+                    </>
+                  )}
                   
                   <div>
                     <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Game Size (GB)</label>
